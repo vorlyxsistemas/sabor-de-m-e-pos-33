@@ -5,22 +5,59 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Business hours: Mon-Sat 07:00-14:00
-function isWithinBusinessHours(): boolean {
+// Get current hour in Brazil timezone (UTC-3)
+function getCurrentHour(): number {
   const now = new Date()
-  const dayOfWeek = now.getDay() // 0 = Sunday
-  const hours = now.getHours()
-  const minutes = now.getMinutes()
-  const currentTime = hours * 60 + minutes
+  const brazilOffset = -3 * 60
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes()
+  const brazilMinutes = utcMinutes + brazilOffset
+  return Math.floor(brazilMinutes / 60) % 24
+}
 
-  // Closed on Sundays (0)
-  if (dayOfWeek === 0) return false
+function getDayOfWeek(): number {
+  const now = new Date()
+  const brazilOffset = -3 * 60 * 60 * 1000
+  const brazilTime = new Date(now.getTime() + brazilOffset)
+  return brazilTime.getUTCDay()
+}
 
-  // Open Mon-Sat 07:00 (420 min) to 14:00 (840 min)
-  const openTime = 7 * 60 // 07:00
-  const closeTime = 14 * 60 // 14:00
+// Business hours: Mon-Sat 07:00-14:00
+function isWithinBusinessHours(): { open: boolean; message?: string } {
+  const dayOfWeek = getDayOfWeek()
+  const currentHour = getCurrentHour()
 
-  return currentTime >= openTime && currentTime <= closeTime
+  // Closed on Sundays
+  if (dayOfWeek === 0) {
+    return { open: false, message: 'Fechado aos domingos' }
+  }
+
+  // Open 07:00-14:00
+  if (currentHour < 7) {
+    return { open: false, message: 'Abrimos às 7h' }
+  }
+
+  if (currentHour >= 14) {
+    return { open: false, message: 'Fechado - nosso horário é de 7h às 14h' }
+  }
+
+  return { open: true }
+}
+
+// Category-specific time rules
+function isCategoryAvailable(categoryName: string): { available: boolean; message?: string } {
+  const currentHour = getCurrentHour()
+
+  // Lanches: only until 10h
+  if (categoryName === 'Lanches' && currentHour >= 10) {
+    return { available: false, message: 'Lanches disponíveis somente até 10h' }
+  }
+
+  // Almoço: only from 11h
+  if (categoryName === 'Almoço' && currentHour < 11) {
+    return { available: false, message: 'Almoço disponível a partir das 11h' }
+  }
+
+  return { available: true }
 }
 
 interface OrderItem {
@@ -121,16 +158,19 @@ Deno.serve(async (req) => {
       
       console.log('Creating new order:', JSON.stringify(body))
 
-      // RULE 1: Check business hours (can be bypassed for testing with query param)
+      // RULE 1: Check business hours
       const skipHoursCheck = url.searchParams.get('skip_hours_check') === 'true'
-      if (!skipHoursCheck && !isWithinBusinessHours()) {
-        return new Response(
-          JSON.stringify({ 
-            error: 'Fora do horário de funcionamento',
-            message: 'Nosso horário é de Segunda a Sábado, das 07:00 às 14:00'
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+      if (!skipHoursCheck) {
+        const businessHours = isWithinBusinessHours()
+        if (!businessHours.open) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'Fora do horário de funcionamento',
+              message: businessHours.message
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
       }
 
       // Validate required fields
@@ -169,6 +209,24 @@ Deno.serve(async (req) => {
         )
       }
 
+      // RULE 3: Check category-specific time restrictions
+      if (!skipHoursCheck) {
+        for (const dbItem of dbItems || []) {
+          const categoryName = dbItem.category?.name || ''
+          const categoryCheck = isCategoryAvailable(categoryName)
+          
+          if (!categoryCheck.available) {
+            return new Response(
+              JSON.stringify({ 
+                error: categoryCheck.message,
+                item: dbItem.name
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+        }
+      }
+
       // Fetch global extras
       const { data: globalExtras } = await supabase
         .from('global_extras')
@@ -193,14 +251,15 @@ Deno.serve(async (req) => {
         let itemExtrasPrice = 0
         const appliedExtras: { name: string; price: number }[] = []
 
-        // RULE 3: Tapioca molhada (+R$1.00 per unit if allowed and not already molhado)
+        // RULE 4: Tapioca molhada (+R$1.00 per unit if allowed and not already molhado)
         let tapiocaMolhadaApplied = false
         if (orderItem.tapioca_molhada && dbItem.allow_tapioca_molhada && !dbItem.is_molhado_by_default) {
           itemPrice += 1.00
           tapiocaMolhadaApplied = true
+          console.log(`Applied tapioca molhada to ${dbItem.name}: +R$1.00`)
         }
 
-        // RULE 4: Apply extras
+        // RULE 5: Apply extras (OVO = R$2 for Lanches/Tapiocas, CARNE_EXTRA = R$6 for Almoço)
         if (orderItem.extras && orderItem.extras.length > 0 && dbItem.allow_extras) {
           const categoryName = dbItem.category?.name || ''
           
@@ -212,6 +271,7 @@ Deno.serve(async (req) => {
               if (!globalExtra.applies_to_category || globalExtra.applies_to_category === categoryName) {
                 itemExtrasPrice += Number(globalExtra.price)
                 appliedExtras.push({ name: globalExtra.name, price: Number(globalExtra.price) })
+                console.log(`Applied global extra ${globalExtra.name} to ${dbItem.name}: +R$${globalExtra.price}`)
               }
             }
 
@@ -226,6 +286,7 @@ Deno.serve(async (req) => {
               for (const ie of itemExtras) {
                 itemExtrasPrice += Number(ie.price)
                 appliedExtras.push({ name: ie.name, price: Number(ie.price) })
+                console.log(`Applied item extra ${ie.name} to ${dbItem.name}: +R$${ie.price}`)
               }
             }
           }
@@ -244,7 +305,7 @@ Deno.serve(async (req) => {
         })
       }
 
-      // RULE 5: Calculate delivery fee
+      // RULE 6: Calculate delivery fee
       let deliveryFee = 0
       if (body.order_type === 'entrega') {
         if (!body.address?.bairro) {
@@ -272,9 +333,12 @@ Deno.serve(async (req) => {
         }
 
         deliveryFee = Number(taxaData[0].taxa) || 0
+        console.log(`Delivery fee for ${body.address.bairro}: R$${deliveryFee}`)
       }
 
       const total = subtotal + deliveryFee
+
+      console.log(`Order totals - Subtotal: R$${subtotal}, Extras: R$${extrasTotal}, Delivery: R$${deliveryFee}, Total: R$${total}`)
 
       // Create order
       const { data: order, error: orderError } = await supabase
