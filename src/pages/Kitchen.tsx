@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ChevronRight } from "lucide-react";
 
-type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered';
+type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 
 interface Order {
   id: string;
