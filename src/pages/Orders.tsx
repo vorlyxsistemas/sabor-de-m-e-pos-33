@@ -29,7 +29,7 @@ const Orders = () => {
       .gte('created_at', threeDaysAgo.toISOString())
       .order('created_at', { ascending: false });
 
-    if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+    if (statusFilter !== 'all') query = query.eq('status', statusFilter as any);
 
     const { data } = await query;
     setOrders(data || []);

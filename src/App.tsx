@@ -3,58 +3,64 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Pages
 import Index from "./pages/Index";
-import Login from "./pages/Login";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 // Admin Pages
 import Dashboard from "./pages/admin/Dashboard";
+import Categories from "./pages/admin/Categories";
+import Items from "./pages/admin/Items";
+import Lunch from "./pages/admin/Lunch";
+import DeliveryZones from "./pages/admin/DeliveryZones";
+import Users from "./pages/admin/Users";
 import Pedidos from "./pages/admin/Pedidos";
-import Cardapio from "./pages/admin/Cardapio";
-import Almoco from "./pages/admin/Almoco";
-import Kanban from "./pages/admin/Kanban";
-import Usuarios from "./pages/admin/Usuarios";
 import Configuracoes from "./pages/admin/Configuracoes";
 
-// Staff Pages
-import StaffDashboard from "./pages/staff/StaffDashboard";
-import StaffKanban from "./pages/staff/StaffKanban";
-import StaffPedidos from "./pages/staff/StaffPedidos";
+// Staff/Shared Pages
+import Kitchen from "./pages/Kitchen";
+import Orders from "./pages/Orders";
+import NewOrder from "./pages/NewOrder";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Auth />} />
 
-          {/* Admin Routes */}
-          <Route path="/admin" element={<Dashboard />} />
-          <Route path="/admin/pedidos" element={<Pedidos />} />
-          <Route path="/admin/cardapio" element={<Cardapio />} />
-          <Route path="/admin/almoco" element={<Almoco />} />
-          <Route path="/admin/kanban" element={<Kanban />} />
-          <Route path="/admin/usuarios" element={<Usuarios />} />
-          <Route path="/admin/configuracoes" element={<Configuracoes />} />
+            {/* Admin Routes */}
+            <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Dashboard /></ProtectedRoute>} />
+            <Route path="/admin/categories" element={<ProtectedRoute allowedRoles={['admin']}><Categories /></ProtectedRoute>} />
+            <Route path="/admin/items" element={<ProtectedRoute allowedRoles={['admin']}><Items /></ProtectedRoute>} />
+            <Route path="/admin/lunch" element={<ProtectedRoute allowedRoles={['admin']}><Lunch /></ProtectedRoute>} />
+            <Route path="/admin/delivery-zones" element={<ProtectedRoute allowedRoles={['admin']}><DeliveryZones /></ProtectedRoute>} />
+            <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><Users /></ProtectedRoute>} />
+            <Route path="/admin/pedidos" element={<ProtectedRoute allowedRoles={['admin']}><Pedidos /></ProtectedRoute>} />
+            <Route path="/admin/configuracoes" element={<ProtectedRoute allowedRoles={['admin']}><Configuracoes /></ProtectedRoute>} />
 
-          {/* Staff Routes */}
-          <Route path="/staff" element={<StaffDashboard />} />
-          <Route path="/staff/kanban" element={<StaffKanban />} />
-          <Route path="/staff/pedidos" element={<StaffPedidos />} />
+            {/* Staff Routes */}
+            <Route path="/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Kitchen /></ProtectedRoute>} />
+            <Route path="/orders" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Orders /></ProtectedRoute>} />
+            <Route path="/orders/new" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><NewOrder /></ProtectedRoute>} />
 
-          {/* 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
