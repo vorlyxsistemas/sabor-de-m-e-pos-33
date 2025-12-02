@@ -25,10 +25,13 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   if (allowedRoles && role && !allowedRoles.includes(role)) {
     // Redirect based on role
+    if (role === 'admin') {
+      return <Navigate to="/admin" replace />;
+    }
     if (role === 'staff') {
       return <Navigate to="/kitchen" replace />;
     }
-    return <Navigate to="/" replace />;
+    return <Navigate to="/customer" replace />;
   }
 
   return <>{children}</>;
