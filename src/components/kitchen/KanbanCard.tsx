@@ -57,7 +57,7 @@ export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: Kanb
 
   return (
     <Card
-      className="w-[220px] min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+      className="w-full max-w-full min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm transition-shadow box-border relative z-[1]"
     >
       {/* Top: Order ID + Badge */}
       <div className="flex items-center justify-between gap-2">
