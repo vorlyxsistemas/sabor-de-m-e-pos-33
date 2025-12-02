@@ -94,9 +94,14 @@ const Index = () => {
                 </Button>
               )}
               {!isAdmin && !isStaff && (
-                <p className="text-muted-foreground text-sm">
-                  Você está logado como cliente. Faça pedidos pelo WhatsApp.
-                </p>
+                <Button 
+                  size="lg" 
+                  onClick={() => navigate("/customer")}
+                  className="gap-2"
+                >
+                  Minha Área
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               )}
               <Button 
                 size="lg" 

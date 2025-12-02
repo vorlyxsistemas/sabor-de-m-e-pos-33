@@ -41,7 +41,7 @@ export default function Auth() {
       } else if (role === 'staff') {
         navigate('/kitchen', { replace: true });
       } else {
-        navigate('/', { replace: true });
+        navigate('/customer', { replace: true });
       }
     }
   }, [user, role, navigate, location]);
