@@ -1,85 +1,168 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { StaffLayout } from "@/components/layout/StaffLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ChevronRight } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { KanbanCard } from "@/components/kitchen/KanbanCard";
+import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
+import { PrintReceipt } from "@/components/kitchen/PrintReceipt";
 
-type OrderStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+type OrderStatus = "pending" | "preparing" | "ready" | "delivered" | "cancelled";
+
+interface OrderItem {
+  quantity: number;
+  price: number;
+  extras: any;
+  tapioca_molhada: boolean;
+  item: { name: string } | null;
+}
 
 interface Order {
   id: string;
   customer_name: string;
+  customer_phone: string | null;
   status: OrderStatus;
+  order_type: string;
+  address: string | null;
+  cep: string | null;
+  reference: string | null;
+  subtotal: number;
+  delivery_tax: number | null;
+  extras_fee: number | null;
+  total: number;
   created_at: string;
-  order_items: { quantity: number; item: { name: string } | null }[];
+  scheduled_for: string | null;
+  order_items: OrderItem[];
 }
 
+const STATUS_ORDER: OrderStatus[] = ["pending", "preparing", "ready", "delivered"];
+
 const columns: { status: OrderStatus; title: string; color: string }[] = [
-  { status: 'pending', title: 'A Preparar', color: 'bg-yellow-500' },
-  { status: 'preparing', title: 'Preparando', color: 'bg-blue-500' },
-  { status: 'ready', title: 'Pronto', color: 'bg-green-500' },
-  { status: 'delivered', title: 'Entregue', color: 'bg-gray-500' },
+  { status: "pending", title: "A Preparar", color: "bg-yellow-500" },
+  { status: "preparing", title: "Preparando", color: "bg-blue-500" },
+  { status: "ready", title: "Pronto", color: "bg-green-500" },
+  { status: "delivered", title: "Entregue", color: "bg-gray-500" },
 ];
+
+function getNextStatus(current: OrderStatus): OrderStatus | null {
+  const idx = STATUS_ORDER.indexOf(current);
+  if (idx < 0 || idx >= STATUS_ORDER.length - 1) return null;
+  return STATUS_ORDER[idx + 1];
+}
 
 const Kitchen = () => {
   const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
 
-  useEffect(() => {
-    fetchOrders();
-    
-    // Realtime subscription
-    const channel = supabase
-      .channel('orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const { data, error } = await supabase
-        .from('orders')
-        .select(`*, order_items(quantity, item:items(name))`)
-        .gte('created_at', today.toISOString())
-        .order('created_at');
+        .from("orders")
+        .select(`
+          id,
+          customer_name,
+          customer_phone,
+          status,
+          order_type,
+          address,
+          cep,
+          reference,
+          subtotal,
+          delivery_tax,
+          extras_fee,
+          total,
+          created_at,
+          scheduled_for,
+          order_items(quantity, price, extras, tapioca_molhada, item:items(name))
+        `)
+        .gte("created_at", today.toISOString())
+        .neq("status", "cancelled")
+        .order("created_at");
 
       if (error) throw error;
-      setOrders(data || []);
+      setOrders((data as Order[]) || []);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Erro ao buscar pedidos:", error);
+      toast({
+        title: "Erro ao carregar pedidos",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const moveOrder = async (orderId: string, newStatus: OrderStatus) => {
+  useEffect(() => {
+    fetchOrders();
+
+    // Realtime subscription
+    const channel = supabase
+      .channel("kitchen-orders-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        (payload) => {
+          console.log("Realtime update:", payload);
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchOrders]);
+
+  const moveOrder = async (orderId: string, currentStatus: OrderStatus) => {
+    const nextStatus = getNextStatus(currentStatus);
+    if (!nextStatus) {
+      toast({ title: "Este pedido já está no último estágio" });
+      return;
+    }
+
     try {
       const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
+        .from("orders")
+        .update({ status: nextStatus })
+        .eq("id", orderId);
 
       if (error) throw error;
-      toast({ title: "Status atualizado!" });
+
+      // Optimistic update
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+      );
+
+      toast({
+        title: "Status atualizado!",
+        description: `Pedido movido para "${columns.find((c) => c.status === nextStatus)?.title}"`,
+      });
     } catch (error: any) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      console.error("Erro ao atualizar status:", error);
+      toast({
+        title: "Erro ao atualizar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
     }
   };
 
-  const getNextStatus = (current: OrderStatus): OrderStatus | null => {
-    const idx = columns.findIndex(c => c.status === current);
-    return idx < columns.length - 1 ? columns[idx + 1].status : null;
+  const handleViewDetails = (order: Order) => {
+    setSelectedOrder(order);
+    setShowDetails(true);
+  };
+
+  const handlePrint = (order: Order) => {
+    setShowDetails(false);
+    setPrintOrder(order);
   };
 
   if (loading) {
@@ -92,51 +175,49 @@ const Kitchen = () => {
     );
   }
 
+  if (printOrder) {
+    return <PrintReceipt order={printOrder} onClose={() => setPrintOrder(null)} />;
+  }
+
   return (
     <StaffLayout title="Cozinha" subtitle="Kanban de pedidos em tempo real">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {columns.map((col) => (
-          <div key={col.status} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${col.color}`} />
-              <h3 className="font-semibold">{col.title}</h3>
-              <Badge variant="outline">{orders.filter(o => o.status === col.status).length}</Badge>
+        {columns.map((col) => {
+          const columnOrders = orders.filter((o) => o.status === col.status);
+          return (
+            <div key={col.status} className="space-y-3">
+              <div className="flex items-center gap-2 sticky top-0 bg-background py-2">
+                <div className={`w-3 h-3 rounded-full ${col.color}`} />
+                <h3 className="font-semibold">{col.title}</h3>
+                <Badge variant="outline">{columnOrders.length}</Badge>
+              </div>
+              <div className="space-y-2 min-h-[200px] bg-muted/30 rounded-lg p-2">
+                {columnOrders.map((order) => (
+                  <KanbanCard
+                    key={order.id}
+                    order={order}
+                    onAdvance={() => moveOrder(order.id, order.status)}
+                    onViewDetails={() => handleViewDetails(order)}
+                    canAdvance={col.status !== "delivered"}
+                  />
+                ))}
+                {columnOrders.length === 0 && (
+                  <div className="text-center text-muted-foreground text-sm py-8">
+                    Nenhum pedido
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-2 min-h-[200px] bg-muted/30 rounded-lg p-2">
-              {orders.filter(o => o.status === col.status).map((order) => (
-                <Card key={order.id} className="shadow-sm">
-                  <CardHeader className="py-2 px-3">
-                    <CardTitle className="text-sm flex justify-between">
-                      <span>{order.customer_name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="py-2 px-3">
-                    <ul className="text-xs text-muted-foreground space-y-1">
-                      {order.order_items?.slice(0, 3).map((oi, i) => (
-                        <li key={i}>{oi.quantity}x {oi.item?.name || 'Item'}</li>
-                      ))}
-                      {order.order_items?.length > 3 && <li>+{order.order_items.length - 3} mais</li>}
-                    </ul>
-                    {getNextStatus(order.status) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full mt-2 h-7 text-xs"
-                        onClick={() => moveOrder(order.id, getNextStatus(order.status)!)}
-                      >
-                        Avançar <ChevronRight className="h-3 w-3 ml-1" />
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      <OrderDetailsModal
+        order={selectedOrder}
+        open={showDetails}
+        onClose={() => setShowDetails(false)}
+        onPrint={handlePrint}
+      />
     </StaffLayout>
   );
 };
