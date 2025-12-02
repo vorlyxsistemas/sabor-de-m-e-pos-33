@@ -185,13 +185,13 @@ const Kitchen = () => {
         {columns.map((col) => {
           const columnOrders = orders.filter((o) => o.status === col.status);
           return (
-            <div key={col.status} className="space-y-3">
-              <div className="flex items-center gap-2 sticky top-0 bg-background py-2">
+            <div key={col.status} className="flex flex-col min-w-0 relative z-0">
+              <div className="flex items-center gap-2 sticky top-0 bg-background py-2 z-10">
                 <div className={`w-3 h-3 rounded-full ${col.color}`} />
                 <h3 className="font-semibold">{col.title}</h3>
                 <Badge variant="outline">{columnOrders.length}</Badge>
               </div>
-              <div className="space-y-2 min-h-[200px] bg-muted/30 rounded-lg p-2">
+              <div className="flex flex-col gap-2 min-h-[200px] bg-muted/30 rounded-lg p-2 overflow-x-hidden overflow-y-auto">
                 {columnOrders.map((order) => (
                   <KanbanCard
                     key={order.id}
