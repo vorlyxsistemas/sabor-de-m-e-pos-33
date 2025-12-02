@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.log-message]
 verify_jwt = false
+
+[functions.menu]
+verify_jwt = false
