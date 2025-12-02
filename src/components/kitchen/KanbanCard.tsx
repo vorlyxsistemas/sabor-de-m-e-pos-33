@@ -1,7 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ChevronRight, Eye, Truck, Package, UtensilsCrossed } from "lucide-react";
+import { ChevronRight, Eye, Truck, Package, UtensilsCrossed, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 interface OrderItem {
@@ -26,76 +25,91 @@ interface KanbanCardProps {
   canAdvance: boolean;
 }
 
-const orderTypeIcons: Record<string, React.ReactNode> = {
-  entrega: <Truck className="h-4 w-4" />,
-  retirada: <Package className="h-4 w-4" />,
-  local: <UtensilsCrossed className="h-4 w-4" />,
-};
-
-const orderTypeColors: Record<string, string> = {
-  entrega: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  retirada: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  local: "bg-green-500/10 text-green-600 border-green-500/20",
+const orderTypeConfig: Record<string, { icon: React.ReactNode; label: string; bgColor: string; textColor: string }> = {
+  entrega: {
+    icon: <Truck className="h-3 w-3" />,
+    label: "Entrega",
+    bgColor: "bg-blue-100",
+    textColor: "text-blue-700",
+  },
+  retirada: {
+    icon: <Package className="h-3 w-3" />,
+    label: "Retirada",
+    bgColor: "bg-orange-100",
+    textColor: "text-orange-700",
+  },
+  local: {
+    icon: <UtensilsCrossed className="h-3 w-3" />,
+    label: "Local",
+    bgColor: "bg-green-100",
+    textColor: "text-green-700",
+  },
 };
 
 export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: KanbanCardProps) {
   const orderNumber = order.id.slice(-6).toUpperCase();
   const time = format(new Date(order.created_at), "HH:mm");
-  
+  const typeConfig = orderTypeConfig[order.order_type] || orderTypeConfig.local;
+
   const itemsSummary = order.order_items
-    ?.slice(0, 2)
-    .map((oi) => `${oi.quantity}x ${oi.item?.name || "Item"}`)
-    .join(", ");
-  
-  const remainingItems = (order.order_items?.length || 0) - 2;
+    ?.map((oi) => `${oi.quantity}x ${oi.item?.name || "Item"}`)
+    .join(", ") || "Sem itens";
 
   return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow">
-      <CardHeader className="py-2 px-3 pb-1">
-        <CardTitle className="text-sm flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-bold">#{orderNumber}</span>
-            <Badge 
-              variant="outline" 
-              className={`text-xs px-1.5 py-0 ${orderTypeColors[order.order_type] || ""}`}
-            >
-              <span className="mr-1">{orderTypeIcons[order.order_type]}</span>
-              {order.order_type === "entrega" ? "Entrega" : order.order_type === "retirada" ? "Retirada" : "Local"}
-            </Badge>
-          </div>
-          <span className="text-xs font-normal text-muted-foreground">{time}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="py-2 px-3 space-y-2">
-        <div className="text-sm font-medium truncate">{order.customer_name}</div>
-        
-        <div className="text-xs text-muted-foreground">
-          {itemsSummary}
-          {remainingItems > 0 && ` +${remainingItems} mais`}
+    <Card
+      className="w-[220px] min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+    >
+      {/* Top: Order ID + Badge */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-sm text-foreground/80 truncate">
+          #{orderNumber}
+        </span>
+        <div
+          className={`flex items-center gap-1 px-1.5 h-5 rounded-full text-xs font-medium shrink-0 ${typeConfig.bgColor} ${typeConfig.textColor}`}
+        >
+          {typeConfig.icon}
+          <span>{typeConfig.label}</span>
+        </div>
+      </div>
+
+      {/* Content: Time, Name, Summary */}
+      <div className="flex flex-col gap-1 flex-1">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          <span>{time}</span>
         </div>
 
-        <div className="flex gap-1.5 pt-1">
+        <div className="text-sm font-medium text-foreground break-words">
+          {order.customer_name}
+        </div>
+
+        <div className="text-[13px] text-muted-foreground break-words leading-tight">
+          {itemsSummary}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 mt-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="flex-1 h-8 text-xs rounded-lg"
+          onClick={onViewDetails}
+        >
+          <Eye className="h-3.5 w-3.5 mr-1" />
+          Detalhes
+        </Button>
+        {canAdvance && (
           <Button
             size="sm"
-            variant="outline"
-            className="flex-1 h-7 text-xs"
-            onClick={onViewDetails}
+            className="flex-1 h-8 text-xs rounded-lg"
+            onClick={onAdvance}
           >
-            <Eye className="h-3 w-3 mr-1" />
-            Detalhes
+            Avançar
+            <ChevronRight className="h-3.5 w-3.5 ml-1" />
           </Button>
-          {canAdvance && (
-            <Button
-              size="sm"
-              className="flex-1 h-7 text-xs"
-              onClick={onAdvance}
-            >
-              Avançar
-              <ChevronRight className="h-3 w-3 ml-1" />
-            </Button>
-          )}
-        </div>
-      </CardContent>
+        )}
+      </div>
     </Card>
   );
 }
