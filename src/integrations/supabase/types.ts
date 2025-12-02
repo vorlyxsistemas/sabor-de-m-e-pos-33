@@ -109,6 +109,33 @@ export type Database = {
           },
         ]
       }
+      global_extras: {
+        Row: {
+          applies_to_category: string | null
+          code: string
+          created_at: string | null
+          id: string
+          name: string
+          price: number
+        }
+        Insert: {
+          applies_to_category?: string | null
+          code: string
+          created_at?: string | null
+          id?: string
+          name: string
+          price?: number
+        }
+        Update: {
+          applies_to_category?: string | null
+          code?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          price?: number
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           allow_extras: boolean | null
@@ -119,6 +146,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           id: string
+          is_molhado_by_default: boolean | null
           name: string
           price: number
         }
@@ -131,6 +159,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           id?: string
+          is_molhado_by_default?: boolean | null
           name: string
           price?: number
         }
@@ -143,6 +172,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           id?: string
+          is_molhado_by_default?: boolean | null
           name?: string
           price?: number
         }
@@ -260,6 +290,7 @@ export type Database = {
           customer_name: string
           customer_phone: string | null
           delivery_tax: number | null
+          extras_fee: number | null
           id: string
           order_type: Database["public"]["Enums"]["order_type"]
           reference: string | null
@@ -275,6 +306,7 @@ export type Database = {
           customer_name: string
           customer_phone?: string | null
           delivery_tax?: number | null
+          extras_fee?: number | null
           id?: string
           order_type?: Database["public"]["Enums"]["order_type"]
           reference?: string | null
@@ -290,6 +322,7 @@ export type Database = {
           customer_name?: string
           customer_phone?: string | null
           delivery_tax?: number | null
+          extras_fee?: number | null
           id?: string
           order_type?: Database["public"]["Enums"]["order_type"]
           reference?: string | null
@@ -321,6 +354,47 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_items: {
+        Row: {
+          created_at: string | null
+          id: string
+          item_id: string | null
+          last_counted_at: string | null
+          min_stock: number | null
+          quantity: number | null
+          responsible: string | null
+          unit: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          item_id?: string | null
+          last_counted_at?: string | null
+          min_stock?: number | null
+          quantity?: number | null
+          responsible?: string | null
+          unit?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          item_id?: string | null
+          last_counted_at?: string | null
+          min_stock?: number | null
+          quantity?: number | null
+          responsible?: string | null
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -344,6 +418,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_cancel_order: { Args: { order_id: string }; Returns: boolean }
+      get_lunch_menu_for_today: {
+        Args: never
+        Returns: {
+          meat_name: string
+          meat_price: number
+        }[]
+      }
+      get_taxa_by_bairro: {
+        Args: { bairro_in: string }
+        Returns: {
+          dist_km: number
+          taxa: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -351,6 +440,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_pending_orders_in_preparation: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "staff" | "customer"
