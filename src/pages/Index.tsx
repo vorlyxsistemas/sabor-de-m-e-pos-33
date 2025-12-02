@@ -1,9 +1,32 @@
 import { useNavigate } from "react-router-dom";
-import { ChefHat, ArrowRight } from "lucide-react";
+import { ChefHat, ArrowRight, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user, role, loading, signOut, isAdmin, isStaff } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  const handleAccessSystem = () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    
+    // User is logged in, redirect based on role
+    if (isAdmin) {
+      navigate("/admin");
+    } else if (isStaff) {
+      navigate("/kitchen");
+    } else {
+      // Customer - for now just show they're logged in
+      navigate("/login");
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-accent/20 to-background p-4">
@@ -23,30 +46,69 @@ const Index = () => {
           Sistema de gestão para lanchonete
         </p>
 
+        {/* User Status */}
+        {user && !loading && (
+          <div className="mb-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <User className="h-4 w-4" />
+            <span>Logado como: <strong>{user.email}</strong></span>
+            <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+              {role || 'carregando...'}
+            </span>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button 
-            size="lg" 
-            onClick={() => navigate("/login")}
-            className="gap-2"
-          >
-            Acessar Sistema
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-          <Button 
-            size="lg" 
-            variant="outline"
-            onClick={() => navigate("/admin")}
-          >
-            Demo Admin
-          </Button>
-          <Button 
-            size="lg" 
-            variant="outline"
-            onClick={() => navigate("/kitchen")}
-          >
-            Demo Cozinha
-          </Button>
+          {!user ? (
+            // Not logged in - show login button
+            <Button 
+              size="lg" 
+              onClick={() => navigate("/login")}
+              className="gap-2"
+            >
+              Acessar Sistema
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            // Logged in - show appropriate options based on role
+            <>
+              {isAdmin && (
+                <Button 
+                  size="lg" 
+                  onClick={() => navigate("/admin")}
+                  className="gap-2"
+                >
+                  Painel Admin
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+              {isStaff && (
+                <Button 
+                  size="lg" 
+                  variant={isAdmin ? "outline" : "default"}
+                  onClick={() => navigate("/kitchen")}
+                  className="gap-2"
+                >
+                  Cozinha
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+              {!isAdmin && !isStaff && (
+                <p className="text-muted-foreground text-sm">
+                  Você está logado como cliente. Faça pedidos pelo WhatsApp.
+                </p>
+              )}
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={handleSignOut}
+                className="gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Sair
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Info */}
