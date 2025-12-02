@@ -11,9 +11,6 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
-// Customer Pages
-import CustomerDashboard from "./pages/customer/CustomerDashboard";
-
 // Admin Pages
 import Dashboard from "./pages/admin/Dashboard";
 import Categories from "./pages/admin/Categories";
@@ -57,9 +54,6 @@ const App = () => (
             <Route path="/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Kitchen /></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Orders /></ProtectedRoute>} />
             <Route path="/orders/new" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><NewOrder /></ProtectedRoute>} />
-
-            {/* Customer Routes */}
-            <Route path="/customer" element={<ProtectedRoute allowedRoles={['customer']}><CustomerDashboard /></ProtectedRoute>} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

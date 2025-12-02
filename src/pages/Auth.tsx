@@ -41,7 +41,8 @@ export default function Auth() {
       } else if (role === 'staff') {
         navigate('/kitchen', { replace: true });
       } else {
-        navigate('/customer', { replace: true });
+        // Customer role - redirect to home (no customer area)
+        navigate('/', { replace: true });
       }
     }
   }, [user, role, navigate, location]);

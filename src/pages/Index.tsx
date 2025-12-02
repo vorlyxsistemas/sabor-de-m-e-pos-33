@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { ChefHat, ArrowRight, LogOut, User } from "lucide-react";
+import { ChefHat, ArrowRight, LogOut, User, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -11,22 +12,8 @@ const Index = () => {
     await signOut();
   };
 
-  const handleAccessSystem = () => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-    
-    // User is logged in, redirect based on role
-    if (isAdmin) {
-      navigate("/admin");
-    } else if (isStaff) {
-      navigate("/kitchen");
-    } else {
-      // Customer - for now just show they're logged in
-      navigate("/login");
-    }
-  };
+  // Customer logged in - show access denied message
+  const isCustomer = user && role === 'customer';
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-accent/20 to-background p-4">
@@ -43,7 +30,7 @@ const Index = () => {
           Sabor de Mãe
         </h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-md mx-auto">
-          Sistema de gestão para lanchonete
+          Sistema de gestão interno
         </p>
 
         {/* User Status */}
@@ -55,6 +42,16 @@ const Index = () => {
               {role || 'carregando...'}
             </span>
           </div>
+        )}
+
+        {/* Customer Warning */}
+        {isCustomer && (
+          <Alert className="max-w-md mx-auto mb-6 text-left">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Este sistema é de uso interno. Para fazer pedidos, entre em contato pelo WhatsApp.
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Actions */}
@@ -93,16 +90,6 @@ const Index = () => {
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               )}
-              {!isAdmin && !isStaff && (
-                <Button 
-                  size="lg" 
-                  onClick={() => navigate("/customer")}
-                  className="gap-2"
-                >
-                  Minha Área
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              )}
               <Button 
                 size="lg" 
                 variant="outline"
@@ -118,7 +105,7 @@ const Index = () => {
 
         {/* Info */}
         <p className="mt-8 text-xs text-muted-foreground">
-          MVP em desenvolvimento • Versão 0.1.0
+          Sistema interno • Versão 0.1.0
         </p>
       </div>
     </div>

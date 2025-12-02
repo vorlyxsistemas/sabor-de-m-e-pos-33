@@ -24,14 +24,15 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (allowedRoles && role && !allowedRoles.includes(role)) {
-    // Redirect based on role
+    // Redirect based on role - no customer area
     if (role === 'admin') {
       return <Navigate to="/admin" replace />;
     }
     if (role === 'staff') {
       return <Navigate to="/kitchen" replace />;
     }
-    return <Navigate to="/customer" replace />;
+    // Customer or unknown role - go to home
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
