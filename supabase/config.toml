@@ -1,1 +1,22 @@
 project_id = "napgcbrouifczxblteuw"
+
+[functions.categories]
+verify_jwt = false
+
+[functions.items]
+verify_jwt = false
+
+[functions.lunch-today]
+verify_jwt = false
+
+[functions.delivery]
+verify_jwt = false
+
+[functions.orders]
+verify_jwt = false
+
+[functions.ai-session]
+verify_jwt = false
+
+[functions.log-message]
+verify_jwt = false
