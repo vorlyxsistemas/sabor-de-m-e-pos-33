@@ -28,7 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 import { z } from "zod";
 
 interface UserWithRole {
@@ -129,34 +129,23 @@ const Users = () => {
 
     setSaving(true);
     try {
-      // Note: This creates a user via Supabase Auth
-      // In production, you'd use an edge function with admin privileges
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name,
-            phone: formData.phone,
-          },
+      // Use edge function to create user without affecting current session
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          email: formData.email,
+          password: formData.password,
+          name: formData.name,
+          phone: formData.phone,
+          role: formData.role,
         },
       });
 
       if (error) throw error;
-
-      if (data.user) {
-        // Update role if not customer
-        if (formData.role !== 'customer') {
-          await supabase
-            .from('user_roles')
-            .update({ role: formData.role })
-            .eq('user_id', data.user.id);
-        }
-      }
+      if (data?.error) throw new Error(data.error);
 
       toast({
         title: "Usuário criado!",
-        description: "Um email de confirmação foi enviado.",
+        description: "Usuário cadastrado com sucesso.",
       });
       setDialogOpen(false);
       fetchUsers();

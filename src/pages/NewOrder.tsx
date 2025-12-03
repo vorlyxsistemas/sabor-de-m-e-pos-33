@@ -9,8 +9,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck } from "lucide-react";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
+import { ItemCard } from "@/components/order/ItemCard";
 
 interface CartItem {
   item_id: string | null;
@@ -254,20 +255,11 @@ const NewOrder = () => {
             ) : (
               <div className="grid sm:grid-cols-2 gap-3">
                 {items.map(item => (
-                  <Card key={item.id} className="shadow-sm">
-                    <CardHeader className="py-3 px-4">
-                      <CardTitle className="text-sm flex justify-between">
-                        <span>{item.name}</span>
-                        <span>R$ {Number(item.price).toFixed(2)}</span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="py-2 px-4">
-                      <p className="text-xs text-muted-foreground mb-2">{item.description}</p>
-                      <Button size="sm" onClick={() => addToCart(item)} className="w-full">
-                        <Plus className="h-4 w-4 mr-1" /> Adicionar
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  <ItemCard 
+                    key={item.id} 
+                    item={item} 
+                    onAddToCart={addToCart}
+                  />
                 ))}
               </div>
             )
@@ -361,11 +353,29 @@ const NewOrder = () => {
                 <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="(00) 00000-0000" />
               </div>
               <div>
-                <Label className="text-xs">Tipo de Pedido</Label>
-                <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="flex gap-4 mt-1">
-                  <div className="flex items-center space-x-1"><RadioGroupItem value="local" id="local" /><Label htmlFor="local" className="text-xs">Local</Label></div>
-                  <div className="flex items-center space-x-1"><RadioGroupItem value="retirada" id="retirada" /><Label htmlFor="retirada" className="text-xs">Retirada</Label></div>
-                  <div className="flex items-center space-x-1"><RadioGroupItem value="entrega" id="entrega" /><Label htmlFor="entrega" className="text-xs">Entrega</Label></div>
+                <Label className="text-xs font-medium">Tipo de Pedido *</Label>
+                <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="grid grid-cols-3 gap-2 mt-2">
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'local' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="local" id="local" className="sr-only" />
+                    <Label htmlFor="local" className="cursor-pointer text-center">
+                      <Store className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Local</span>
+                    </Label>
+                  </div>
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'retirada' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="retirada" id="retirada" className="sr-only" />
+                    <Label htmlFor="retirada" className="cursor-pointer text-center">
+                      <MapPin className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Retirada</span>
+                    </Label>
+                  </div>
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'entrega' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="entrega" id="entrega" className="sr-only" />
+                    <Label htmlFor="entrega" className="cursor-pointer text-center">
+                      <Truck className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Entrega</span>
+                    </Label>
+                  </div>
                 </RadioGroup>
               </div>
               {orderType === 'entrega' && (
