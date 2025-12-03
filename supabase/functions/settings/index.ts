@@ -17,30 +17,44 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // GET - Fetch settings
+    // GET - Fetch settings (get first row)
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("settings")
         .select("*")
-        .eq("id", 1)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
-      if (error && error.code === "PGRST116") {
-        // No settings found, create default
+      if (error) {
+        console.error("Error fetching settings:", error);
+        throw error;
+      }
+
+      // If no settings found, create default
+      if (!data) {
+        console.log("No settings found, creating default...");
         const { data: newSettings, error: insertError } = await supabase
           .from("settings")
-          .insert({ id: 1, auto_print_enabled: false })
+          .insert({ 
+            auto_print_enabled: false,
+            whatsapp_enabled: false,
+            webhook_n8n_url: null
+          })
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Error creating default settings:", insertError);
+          throw insertError;
+        }
+        
+        console.log("Default settings created:", newSettings);
         return new Response(JSON.stringify(newSettings), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      if (error) throw error;
-
+      console.log("Settings fetched:", data);
       return new Response(JSON.stringify(data), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -49,22 +63,57 @@ serve(async (req) => {
     // POST - Update settings
     if (req.method === "POST") {
       const body = await req.json();
+      console.log("Updating settings with:", body);
+      
       const { auto_print_enabled, webhook_n8n_url, whatsapp_enabled } = body;
 
+      // First get current settings
+      const { data: currentSettings } = await supabase
+        .from("settings")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+
       // Build update object with only provided fields
-      const updateData: Record<string, unknown> = { id: 1 };
+      const updateData: Record<string, unknown> = {
+        updated_at: new Date().toISOString()
+      };
       if (auto_print_enabled !== undefined) updateData.auto_print_enabled = auto_print_enabled;
       if (webhook_n8n_url !== undefined) updateData.webhook_n8n_url = webhook_n8n_url;
       if (whatsapp_enabled !== undefined) updateData.whatsapp_enabled = whatsapp_enabled;
 
-      // Upsert settings
-      const { data, error } = await supabase
-        .from("settings")
-        .upsert(updateData, { onConflict: "id" })
-        .select()
-        .single();
+      let data;
+      let error;
 
-      if (error) throw error;
+      if (currentSettings?.id) {
+        // Update existing settings
+        const result = await supabase
+          .from("settings")
+          .update(updateData)
+          .eq("id", currentSettings.id)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        // Insert new settings
+        const result = await supabase
+          .from("settings")
+          .insert({
+            auto_print_enabled: auto_print_enabled ?? false,
+            whatsapp_enabled: whatsapp_enabled ?? false,
+            webhook_n8n_url: webhook_n8n_url ?? null
+          })
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      }
+
+      if (error) {
+        console.error("Error updating settings:", error);
+        throw error;
+      }
 
       console.log("Settings updated:", data);
 
