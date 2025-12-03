@@ -411,7 +411,7 @@ const Configuracoes = () => {
               <MessageSquare className="h-5 w-5 text-primary" />
               Agente Sofia (N8N)
             </CardTitle>
-            <CardDescription>Configure o webhook do agente de IA</CardDescription>
+            <CardDescription>Configure o webhook do agente de IA para processar mensagens</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -423,6 +423,23 @@ const Configuracoes = () => {
               />
               <p className="text-xs text-muted-foreground">
                 URL do webhook N8N que receberá as mensagens do WhatsApp
+              </p>
+            </div>
+
+            <div className="p-3 bg-muted rounded-lg space-y-2">
+              <p className="text-sm font-medium">Payload recebido pelo N8N:</p>
+              <pre className="text-xs font-mono text-muted-foreground overflow-x-auto">
+{`{
+  "phone": "5588999999999",
+  "message": "texto da mensagem",
+  "type": "text",
+  "client_id": "uuid-do-cliente",
+  "client_name": "Nome do Cliente",
+  "timestamp": "2025-12-03T12:00:00Z"
+}`}
+              </pre>
+              <p className="text-xs text-muted-foreground">
+                Configure um trigger "Webhook" no N8N para receber esses dados e processar com a Sofia.
               </p>
             </div>
             
