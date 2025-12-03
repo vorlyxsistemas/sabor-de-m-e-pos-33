@@ -35,16 +35,19 @@ const Configuracoes = () => {
 
   const fetchSettings = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("settings", {
-        method: "GET",
-      });
+      const { data, error } = await supabase.functions.invoke("settings");
 
       if (error) throw error;
       setAutoPrintEnabled(data?.auto_print_enabled || false);
       setWhatsappEnabled(data?.whatsapp_enabled || false);
       setWebhookN8nUrl(data?.webhook_n8n_url || "");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao carregar configurações:", error);
+      toast({
+        title: "Erro ao carregar configurações",
+        description: "Verifique se as Edge Functions foram implantadas. Aguarde alguns segundos e recarregue a página.",
+        variant: "destructive",
+      });
     } finally {
       setLoadingSettings(false);
     }
@@ -54,7 +57,6 @@ const Configuracoes = () => {
     setSavingPrint(true);
     try {
       const { error } = await supabase.functions.invoke("settings", {
-        method: "POST",
         body: { auto_print_enabled: enabled },
       });
 
@@ -190,7 +192,6 @@ const Configuracoes = () => {
                     setSavingWhatsapp(true);
                     try {
                       const { error } = await supabase.functions.invoke("settings", {
-                        method: "POST",
                         body: { whatsapp_enabled: enabled },
                       });
                       if (error) throw error;
@@ -280,10 +281,9 @@ const Configuracoes = () => {
             <div className="flex gap-2">
               <Button 
                 onClick={async () => {
-                  setSavingWhatsapp(true);
+                    setSavingWhatsapp(true);
                   try {
                     const { error } = await supabase.functions.invoke("settings", {
-                      method: "POST",
                       body: { webhook_n8n_url: webhookN8nUrl },
                     });
                     if (error) throw error;
