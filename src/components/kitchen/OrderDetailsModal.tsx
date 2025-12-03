@@ -1,8 +1,9 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Printer, MapPin, Phone, User, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { printReceipt } from "@/lib/printReceipt";
 
 interface OrderItem {
   quantity: number;
@@ -48,6 +49,10 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
 
   const orderNumber = order.id.slice(-6).toUpperCase();
 
+  const handlePrint = () => {
+    printReceipt(order);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -56,6 +61,9 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
             <span>Pedido #{orderNumber}</span>
             <Badge variant="outline">{orderTypeLabels[order.order_type] || order.order_type}</Badge>
           </DialogTitle>
+          <DialogDescription>
+            Detalhes do pedido de {order.customer_name}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -178,10 +186,16 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           </div>
 
           {/* Actions */}
-          <Button onClick={() => onPrint(order)} className="w-full" variant="outline">
-            <Printer className="h-4 w-4 mr-2" />
-            Imprimir Comanda
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handlePrint} className="flex-1" variant="outline">
+              <Printer className="h-4 w-4 mr-2" />
+              Imprimir Comanda
+            </Button>
+            <Button onClick={() => onPrint(order)} className="flex-1" variant="secondary">
+              <Printer className="h-4 w-4 mr-2" />
+              Visualizar
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

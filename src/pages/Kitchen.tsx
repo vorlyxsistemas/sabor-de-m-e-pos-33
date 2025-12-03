@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { StaffLayout } from "@/components/layout/StaffLayout";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { KanbanCard } from "@/components/kitchen/KanbanCard";
 import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
 import { PrintReceipt } from "@/components/kitchen/PrintReceipt";
+import { printReceipt } from "@/lib/printReceipt";
 
 type OrderStatus = "pending" | "preparing" | "ready" | "delivered" | "cancelled";
 
@@ -58,6 +59,7 @@ const Kitchen = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const printedOrdersRef = useRef<Set<string>>(new Set());
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -100,6 +102,34 @@ const Kitchen = () => {
     }
   }, [toast]);
 
+  // Auto-print new pending orders
+  const autoPrintPendingOrders = useCallback((newOrders: Order[]) => {
+    newOrders.forEach((order) => {
+      if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
+        printedOrdersRef.current.add(order.id);
+        console.log("Auto-printing order:", order.id);
+        
+        // Small delay to ensure order data is complete
+        setTimeout(() => {
+          try {
+            printReceipt(order);
+            toast({
+              title: "Comanda impressa",
+              description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
+            });
+          } catch (error) {
+            console.error("Erro ao imprimir comanda:", error);
+            toast({
+              title: "Erro na impressão",
+              description: "Não foi possível imprimir a comanda automaticamente",
+              variant: "destructive",
+            });
+          }
+        }, 500);
+      }
+    });
+  }, [toast]);
+
   useEffect(() => {
     fetchOrders();
 
@@ -108,9 +138,42 @@ const Kitchen = () => {
       .channel("kitchen-orders-realtime")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        (payload) => {
-          console.log("Realtime update:", payload);
+        { event: "INSERT", schema: "public", table: "orders" },
+        async (payload) => {
+          console.log("New order inserted:", payload);
+          // Fetch the complete order with items for printing
+          const { data: newOrder } = await supabase
+            .from("orders")
+            .select(`
+              id,
+              customer_name,
+              customer_phone,
+              status,
+              order_type,
+              address,
+              cep,
+              reference,
+              subtotal,
+              delivery_tax,
+              extras_fee,
+              total,
+              created_at,
+              scheduled_for,
+              order_items(quantity, price, extras, tapioca_molhada, item:items(name))
+            `)
+            .eq("id", payload.new.id)
+            .single();
+          
+          if (newOrder && newOrder.status === "pending") {
+            autoPrintPendingOrders([newOrder as Order]);
+          }
+          fetchOrders();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders" },
+        () => {
           fetchOrders();
         }
       )
@@ -119,7 +182,7 @@ const Kitchen = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, autoPrintPendingOrders]);
 
   const moveOrder = async (orderId: string, currentStatus: OrderStatus) => {
     const nextStatus = getNextStatus(currentStatus);
