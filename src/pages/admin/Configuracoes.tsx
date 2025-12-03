@@ -31,6 +31,7 @@ const Configuracoes = () => {
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [webhookN8nUrl, setWebhookN8nUrl] = useState("");
+  const [testPhoneNumber, setTestPhoneNumber] = useState("5588988803368");
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [savingPrint, setSavingPrint] = useState(false);
   const [savingWhatsapp, setSavingWhatsapp] = useState(false);
@@ -171,20 +172,40 @@ const Configuracoes = () => {
   };
 
   const handleTestWhatsapp = async () => {
+    // Validação do número de telefone
+    const cleanPhone = testPhoneNumber.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      toast({
+        title: "Número inválido",
+        description: "Digite um número de telefone válido com DDD (ex: 5588999999999)",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setTestingWhatsapp(true);
     try {
-      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
-        body: { to: "5588988803368", text: "Teste de conexão - Sabor de Mãe 🍴" }
+      const { data, error } = await supabase.functions.invoke("whatsapp-enviar", {
+        body: { 
+          to: cleanPhone, 
+          text: "✅ Teste de conexão - Sabor de Mãe 🍴\n\nSe você recebeu esta mensagem, a integração está funcionando!",
+          type: "text"
+        }
       });
+      
       if (error) throw error;
+      
+      console.log("WhatsApp test response:", data);
+      
       toast({
         title: "Mensagem enviada!",
-        description: "Verifique o WhatsApp de destino",
+        description: `Enviado para ${cleanPhone}. Verifique o WhatsApp.`,
       });
     } catch (error: any) {
+      console.error("WhatsApp test error:", error);
       toast({
         title: "Erro ao enviar",
-        description: error.message || "Verifique se a Edge Function whatsapp-send está implantada",
+        description: error.message || "Verifique se a Edge Function whatsapp-enviar está implantada",
         variant: "destructive",
       });
     } finally {
@@ -347,10 +368,22 @@ const Configuracoes = () => {
               </p>
             </div>
 
+            <div className="space-y-2">
+              <Label>Número para Teste</Label>
+              <Input 
+                placeholder="5588999999999"
+                value={testPhoneNumber}
+                onChange={(e) => setTestPhoneNumber(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Número com código do país + DDD (ex: 5588999999999)
+              </p>
+            </div>
+
             <Button 
               variant="outline" 
               size="sm"
-              disabled={testingWhatsapp}
+              disabled={testingWhatsapp || !testPhoneNumber}
               onClick={handleTestWhatsapp}
             >
               {testingWhatsapp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
