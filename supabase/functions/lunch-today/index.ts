@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       weekday_name: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][weekday],
       fixed_items: fixedItems,
       meats: todayMeat || [],
-      available: weekday >= 1 && weekday <= 5 // Only Monday-Friday
+      available: weekday >= 1 && weekday <= 6 // Monday-Saturday (not Sunday)
     }
 
     console.log(`Returning lunch menu: ${fixedItems.length} items, ${todayMeat?.length || 0} meats`)

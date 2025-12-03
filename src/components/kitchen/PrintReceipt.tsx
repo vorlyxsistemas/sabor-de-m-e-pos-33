@@ -129,15 +129,53 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
         </div>
 
         <div className="mb-2">
-          {order.order_items?.map((item, idx) => (
-            <div key={idx} className="flex justify-between">
-              <span>
-                {item.quantity} UND. {(item.item?.name || "ITEM").toUpperCase()}
-                {item.tapioca_molhada && " (MOLHADA)"}
-              </span>
-              <span>R${item.price.toFixed(2)}</span>
-            </div>
-          ))}
+          {order.order_items?.map((item, idx) => {
+            const extras = item.extras as any;
+            const isLunch = extras?.type === "lunch";
+            const itemName = item.item?.name || (isLunch ? `ALMOÇO - ${extras?.base?.name}` : "ITEM");
+
+            return (
+              <div key={idx} className="mb-2">
+                <div className="flex justify-between">
+                  <span>
+                    {item.quantity} UND. {itemName.toUpperCase()}
+                    {item.tapioca_molhada && " (MOLHADA)"}
+                  </span>
+                  <span>R${item.price.toFixed(2)}</span>
+                </div>
+                
+                {/* Lunch Details */}
+                {isLunch && (
+                  <div className="pl-2 text-xs">
+                    {extras?.meats && extras.meats.length > 0 && (
+                      <div>CARNES: {extras.meats.join(", ").toUpperCase()}</div>
+                    )}
+                    {extras?.extraMeats && extras.extraMeats.length > 0 && (
+                      <div>+ EXTRAS: {extras.extraMeats.join(", ").toUpperCase()}</div>
+                    )}
+                    {extras?.sides && extras.sides.length > 0 && (
+                      <div>
+                        ACOMP: {extras.sides.map((s: string) => {
+                          const sideMap: Record<string, string> = {
+                            macarrao: "MACARRÃO", farofa: "FAROFA",
+                            macaxeira: "MACAXEIRA", salada: "SALADA"
+                          };
+                          return sideMap[s] || s.toUpperCase();
+                        }).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Regular Extras */}
+                {!isLunch && extras && Array.isArray(extras) && extras.length > 0 && (
+                  <div className="pl-2 text-xs">
+                    EXTRAS: {extras.map((e: any) => e.name.toUpperCase()).join(", ")}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="text-xs">================================</div>

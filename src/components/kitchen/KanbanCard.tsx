@@ -6,6 +6,8 @@ import { format } from "date-fns";
 interface OrderItem {
   quantity: number;
   price: number;
+  extras: any;
+  tapioca_molhada?: boolean;
   item: { name: string } | null;
 }
 
@@ -52,7 +54,14 @@ export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: Kanb
   const typeConfig = orderTypeConfig[order.order_type] || orderTypeConfig.local;
 
   const itemsSummary = order.order_items
-    ?.map((oi) => `${oi.quantity}x ${oi.item?.name || "Item"}`)
+    ?.map((oi) => {
+      const extras = oi.extras as any;
+      const isLunch = extras?.type === "lunch";
+      if (isLunch) {
+        return `${oi.quantity}x Almoço (${extras?.base?.name || "Base"})`;
+      }
+      return `${oi.quantity}x ${oi.item?.name || "Item"}`;
+    })
     .join(", ") || "Sem itens";
 
   return (

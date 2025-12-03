@@ -93,18 +93,63 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           {/* Items */}
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Itens do Pedido</h4>
-            <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-              {order.order_items?.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-sm">
-                  <span>
-                    {item.quantity}x {item.item?.name || "Item"}
-                    {item.tapioca_molhada && " (molhada)"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    R$ {item.price.toFixed(2)}
-                  </span>
-                </div>
-              ))}
+            <div className="bg-muted/30 rounded-lg p-3 space-y-3">
+              {order.order_items?.map((item, idx) => {
+                const extras = item.extras as any;
+                const isLunch = extras?.type === "lunch";
+
+                return (
+                  <div key={idx} className="border-b border-border/50 last:border-0 pb-2 last:pb-0">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium">
+                        {item.quantity}x {item.item?.name || (isLunch ? `Almoço - ${extras?.base?.name}` : "Item")}
+                        {item.tapioca_molhada && " (molhada)"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        R$ {item.price.toFixed(2)}
+                      </span>
+                    </div>
+                    
+                    {/* Lunch Details */}
+                    {isLunch && (
+                      <div className="mt-1 space-y-1 text-xs text-muted-foreground pl-2">
+                        {extras?.meats && extras.meats.length > 0 && (
+                          <div>
+                            <span className="font-medium text-foreground/80">Carnes: </span>
+                            {extras.meats.join(", ")}
+                          </div>
+                        )}
+                        {extras?.extraMeats && extras.extraMeats.length > 0 && (
+                          <div className="text-orange-600">
+                            <span className="font-medium">+ Extras: </span>
+                            {extras.extraMeats.join(", ")} (+R$6 cada)
+                          </div>
+                        )}
+                        {extras?.sides && extras.sides.length > 0 && (
+                          <div className="text-green-600">
+                            <span className="font-medium">Acomp: </span>
+                            {extras.sides.map((s: string) => {
+                              const sideMap: Record<string, string> = {
+                                macarrao: "Macarrão", farofa: "Farofa",
+                                macaxeira: "Macaxeira", salada: "Salada"
+                              };
+                              return sideMap[s] || s;
+                            }).join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Regular Extras */}
+                    {!isLunch && extras && Array.isArray(extras) && extras.length > 0 && (
+                      <div className="mt-1 text-xs text-muted-foreground pl-2">
+                        <span className="font-medium">Extras: </span>
+                        {extras.map((e: any) => e.name).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
