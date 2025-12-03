@@ -3,7 +3,10 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { generateDailyReport } from "@/lib/generateDailyReport";
 import { 
   ShoppingBag, 
   DollarSign, 
@@ -13,7 +16,8 @@ import {
   Loader2,
   MapPin,
   Store,
-  Truck
+  Truck,
+  FileText
 } from "lucide-react";
 
 interface DashboardStats {
@@ -34,6 +38,7 @@ interface RecentOrder {
 }
 
 const Dashboard = () => {
+  const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats>({
     totalOrders: 0,
     totalRevenue: 0,
@@ -43,6 +48,27 @@ const Dashboard = () => {
   });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatingReport, setGeneratingReport] = useState(false);
+
+  const handleGenerateReport = async () => {
+    setGeneratingReport(true);
+    try {
+      await generateDailyReport();
+      toast({
+        title: "Relatório gerado!",
+        description: "O PDF foi baixado com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error generating report:", error);
+      toast({
+        title: "Erro ao gerar relatório",
+        description: "Tente novamente em alguns instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -171,6 +197,22 @@ const Dashboard = () => {
 
   return (
     <AdminLayout title="Dashboard" subtitle="Visão geral do sistema">
+      {/* Report Button */}
+      <div className="flex justify-end mb-4">
+        <Button 
+          onClick={handleGenerateReport} 
+          disabled={generatingReport}
+          className="gap-2"
+        >
+          {generatingReport ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileText className="h-4 w-4" />
+          )}
+          Gerar Relatório Diário (PDF)
+        </Button>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <StatsCard
