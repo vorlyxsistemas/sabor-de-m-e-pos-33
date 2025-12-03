@@ -49,12 +49,18 @@ serve(async (req) => {
     // POST - Update settings
     if (req.method === "POST") {
       const body = await req.json();
-      const { auto_print_enabled } = body;
+      const { auto_print_enabled, webhook_n8n_url, whatsapp_enabled } = body;
+
+      // Build update object with only provided fields
+      const updateData: Record<string, unknown> = { id: 1 };
+      if (auto_print_enabled !== undefined) updateData.auto_print_enabled = auto_print_enabled;
+      if (webhook_n8n_url !== undefined) updateData.webhook_n8n_url = webhook_n8n_url;
+      if (whatsapp_enabled !== undefined) updateData.whatsapp_enabled = whatsapp_enabled;
 
       // Upsert settings
       const { data, error } = await supabase
         .from("settings")
-        .upsert({ id: 1, auto_print_enabled }, { onConflict: "id" })
+        .upsert(updateData, { onConflict: "id" })
         .select()
         .single();
 
