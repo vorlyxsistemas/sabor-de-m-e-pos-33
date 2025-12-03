@@ -36,8 +36,10 @@ export function ItemCard({ item, onAddToCart }: ItemCardProps) {
   const [tapiocaMolhada, setTapiocaMolhada] = useState(false);
 
   const isTapioca = item.name.toLowerCase().includes("tapioca");
-  const canBeMolhada = item.allow_tapioca_molhada && !item.is_molhado_by_default;
-  const canHaveExtras = item.allow_extras !== false; // Default to true if not specified
+  const isCuscuz = item.name.toLowerCase().includes("cuscuz");
+  const canBeMolhada = isTapioca && !item.is_molhado_by_default;
+  // Always show extras for all lanches (tapiocas, cuscuz, pães, sanduíches, etc.)
+  const canHaveExtras = true;
 
   const handleExtraToggle = (extra: Extra) => {
     setSelectedExtras(prev => {
