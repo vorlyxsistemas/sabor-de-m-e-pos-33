@@ -6,19 +6,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Minus, Trash2, ShoppingCart } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed } from "lucide-react";
+import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 
 interface CartItem {
-  item_id: string;
+  item_id: string | null;
   name: string;
   quantity: number;
   price: number;
   extras: { name: string; price: number }[];
   tapioca_molhada: boolean;
+  // Lunch specific fields
+  isLunch?: boolean;
+  lunchBase?: { id: string; name: string; price: number };
+  lunchMeats?: string[];
+  lunchExtraMeats?: string[];
+  lunchSides?: string[];
+}
+
+interface LunchCartItem {
+  type: "lunch";
+  base: { id: string; name: string; price: number };
+  meats: string[];
+  extraMeats: string[];
+  sides: string[];
+  quantity: number;
+  totalPrice: number;
 }
 
 const NewOrder = () => {
@@ -27,6 +43,7 @@ const NewOrder = () => {
   const [categories, setCategories] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string>("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<'local' | 'retirada' | 'entrega'>('local');
   const [customerName, setCustomerName] = useState('');
@@ -74,6 +91,49 @@ const NewOrder = () => {
       tapioca_molhada,
     }]);
   };
+
+  const addLunchToCart = (lunchItem: LunchCartItem) => {
+    const sidesNames = lunchItem.sides.map(s => {
+      const sideMap: Record<string, string> = {
+        macarrao: "Macarrão",
+        farofa: "Farofa", 
+        macaxeira: "Macaxeira",
+        salada: "Salada"
+      };
+      return sideMap[s] || s;
+    });
+
+    const description = [
+      lunchItem.base.name,
+      `Carnes: ${lunchItem.meats.join(", ")}`,
+      lunchItem.extraMeats.length > 0 ? `Extras: ${lunchItem.extraMeats.join(", ")}` : null,
+      sidesNames.length > 0 ? `Acomp: ${sidesNames.join(", ")}` : null,
+    ].filter(Boolean).join(" | ");
+
+    setCart([...cart, {
+      item_id: null,
+      name: `Almoço - ${lunchItem.base.name}`,
+      quantity: lunchItem.quantity,
+      price: lunchItem.totalPrice / lunchItem.quantity,
+      extras: lunchItem.extraMeats.map(m => ({ name: m, price: 6 })),
+      tapioca_molhada: false,
+      isLunch: true,
+      lunchBase: lunchItem.base,
+      lunchMeats: lunchItem.meats,
+      lunchExtraMeats: lunchItem.extraMeats,
+      lunchSides: lunchItem.sides,
+    }]);
+
+    toast({ title: "Almoço adicionado ao carrinho!" });
+  };
+
+  const handleCategorySelect = (catId: string, catName: string) => {
+    setSelectedCategory(catId);
+    setSelectedCategoryName(catName);
+  };
+
+  const isLunchCategory = selectedCategoryName.toLowerCase().includes("almoço") || 
+                          selectedCategoryName.toLowerCase().includes("almoco");
 
   const updateQuantity = (index: number, delta: number) => {
     const newCart = [...cart];
@@ -131,7 +191,16 @@ const NewOrder = () => {
         order_id: order.id,
         item_id: item.item_id,
         quantity: item.quantity,
-        extras: item.extras,
+        extras: item.isLunch 
+          ? {
+              type: "lunch",
+              base: item.lunchBase,
+              meats: item.lunchMeats,
+              extraMeats: item.lunchExtraMeats,
+              sides: item.lunchSides,
+              regularExtras: item.extras
+            }
+          : item.extras,
         tapioca_molhada: item.tapioca_molhada,
         price: item.price * item.quantity,
       }));
@@ -167,33 +236,41 @@ const NewOrder = () => {
                 key={cat.id}
                 variant={selectedCategory === cat.id ? "default" : "outline"}
                 size="sm"
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => handleCategorySelect(cat.id, cat.name)}
+                className="gap-1"
               >
+                {(cat.name.toLowerCase().includes("almoço") || cat.name.toLowerCase().includes("almoco")) && (
+                  <UtensilsCrossed className="h-3 w-3" />
+                )}
                 {cat.name}
               </Button>
             ))}
           </div>
 
-          {/* Items */}
+          {/* Items - Regular or Lunch */}
           {selectedCategory && (
-            <div className="grid sm:grid-cols-2 gap-3">
-              {items.map(item => (
-                <Card key={item.id} className="shadow-sm">
-                  <CardHeader className="py-3 px-4">
-                    <CardTitle className="text-sm flex justify-between">
-                      <span>{item.name}</span>
-                      <span>R$ {Number(item.price).toFixed(2)}</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="py-2 px-4">
-                    <p className="text-xs text-muted-foreground mb-2">{item.description}</p>
-                    <Button size="sm" onClick={() => addToCart(item)} className="w-full">
-                      <Plus className="h-4 w-4 mr-1" /> Adicionar
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            isLunchCategory ? (
+              <LunchOrderSection onAddToCart={addLunchToCart} />
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {items.map(item => (
+                  <Card key={item.id} className="shadow-sm">
+                    <CardHeader className="py-3 px-4">
+                      <CardTitle className="text-sm flex justify-between">
+                        <span>{item.name}</span>
+                        <span>R$ {Number(item.price).toFixed(2)}</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-2 px-4">
+                      <p className="text-xs text-muted-foreground mb-2">{item.description}</p>
+                      <Button size="sm" onClick={() => addToCart(item)} className="w-full">
+                        <Plus className="h-4 w-4 mr-1" /> Adicionar
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
           )}
         </div>
 
@@ -210,22 +287,55 @@ const NewOrder = () => {
                 <p className="text-sm text-muted-foreground text-center py-4">Carrinho vazio</p>
               ) : (
                 cart.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center border-b pb-2">
-                    <div>
-                      <p className="text-sm font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">R$ {item.price.toFixed(2)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQuantity(index, -1)}>
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <span className="text-sm w-4 text-center">{item.quantity}</span>
-                      <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQuantity(index, 1)}>
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeFromCart(index)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                  <div key={index} className="border-b pb-2">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{item.name}</p>
+                        {item.isLunch && item.lunchMeats && (
+                          <p className="text-xs text-muted-foreground">
+                            Carnes: {item.lunchMeats.join(", ")}
+                          </p>
+                        )}
+                        {item.isLunch && item.lunchExtraMeats && item.lunchExtraMeats.length > 0 && (
+                          <p className="text-xs text-orange-600">
+                            + Extras: {item.lunchExtraMeats.join(", ")}
+                          </p>
+                        )}
+                        {item.isLunch && item.lunchSides && item.lunchSides.length > 0 && (
+                          <p className="text-xs text-green-600">
+                            Acomp: {item.lunchSides.map(s => {
+                              const sideMap: Record<string, string> = {
+                                macarrao: "Macarrão", farofa: "Farofa", 
+                                macaxeira: "Macaxeira", salada: "Salada"
+                              };
+                              return sideMap[s] || s;
+                            }).join(", ")}
+                          </p>
+                        )}
+                        {!item.isLunch && item.extras.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Extras: {item.extras.map(e => e.name).join(", ")}
+                          </p>
+                        )}
+                        {!item.isLunch && item.tapioca_molhada && (
+                          <Badge variant="secondary" className="text-xs mt-1">Molhada +R$1</Badge>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          R$ {item.price.toFixed(2)} x {item.quantity}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQuantity(index, -1)}>
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="text-sm w-4 text-center">{item.quantity}</span>
+                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQuantity(index, 1)}>
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeFromCart(index)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))
