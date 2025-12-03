@@ -29,7 +29,7 @@ export const WhatsAppService = {
    * Send a text message via WhatsApp
    */
   async sendText({ to, text }: SendTextParams): Promise<WhatsAppResponse> {
-    const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+    const { data, error } = await supabase.functions.invoke("whatsapp-enviar", {
       body: { to, text, type: "text" }
     });
 
@@ -45,7 +45,7 @@ export const WhatsAppService = {
    * Send an image with optional caption
    */
   async sendImage({ to, imageUrl, caption }: SendImageParams): Promise<WhatsAppResponse> {
-    const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+    const { data, error } = await supabase.functions.invoke("whatsapp-enviar", {
       body: { to, imageUrl, caption, type: "image" }
     });
 
@@ -61,7 +61,7 @@ export const WhatsAppService = {
    * Send interactive buttons
    */
   async sendButtons({ to, text, buttons }: SendButtonsParams): Promise<WhatsAppResponse> {
-    const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+    const { data, error } = await supabase.functions.invoke("whatsapp-enviar", {
       body: { to, text, buttons, type: "buttons" }
     });
 

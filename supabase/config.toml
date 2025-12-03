@@ -30,8 +30,8 @@ verify_jwt = true
 [functions.settings]
 verify_jwt = false
 
-[functions.whatsapp-incoming]
+[functions.whatsapp-recebido]
 verify_jwt = false
 
-[functions.whatsapp-send]
+[functions.whatsapp-enviar]
 verify_jwt = false
