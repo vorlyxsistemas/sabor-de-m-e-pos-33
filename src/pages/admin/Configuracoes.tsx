@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,16 +6,72 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Store, 
   Clock, 
   MapPin, 
   MessageSquare, 
   Printer,
-  Bell
+  Bell,
+  Loader2
 } from "lucide-react";
 
 const Configuracoes = () => {
+  const { toast } = useToast();
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [savingPrint, setSavingPrint] = useState(false);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("settings", {
+        method: "GET",
+      });
+
+      if (error) throw error;
+      setAutoPrintEnabled(data?.auto_print_enabled || false);
+    } catch (error) {
+      console.error("Erro ao carregar configurações:", error);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  const handleAutoPrintToggle = async (enabled: boolean) => {
+    setSavingPrint(true);
+    try {
+      const { error } = await supabase.functions.invoke("settings", {
+        method: "POST",
+        body: { auto_print_enabled: enabled },
+      });
+
+      if (error) throw error;
+
+      setAutoPrintEnabled(enabled);
+      toast({
+        title: enabled ? "Impressão automática ativada" : "Impressão automática desativada",
+        description: enabled 
+          ? "Comandas serão impressas automaticamente ao enviar para a cozinha"
+          : "Use o botão 'Imprimir Comanda' para imprimir manualmente",
+      });
+    } catch (error: any) {
+      console.error("Erro ao salvar configuração:", error);
+      toast({
+        title: "Erro ao salvar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPrint(false);
+    }
+  };
+
   return (
     <AdminLayout title="Configurações" subtitle="Configurações do sistema">
       <PageHeader
@@ -62,25 +119,23 @@ const Configuracoes = () => {
             <div className="flex items-center justify-between">
               <span className="text-sm">Segunda a Sexta</span>
               <div className="flex gap-2">
-                <Input className="w-20" placeholder="11:00" />
+                <Input className="w-20" placeholder="07:00" />
                 <span className="self-center">até</span>
-                <Input className="w-20" placeholder="22:00" />
+                <Input className="w-20" placeholder="14:00" />
               </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm">Sábado</span>
               <div className="flex gap-2">
-                <Input className="w-20" placeholder="11:00" />
+                <Input className="w-20" placeholder="07:00" />
                 <span className="self-center">até</span>
-                <Input className="w-20" placeholder="23:00" />
+                <Input className="w-20" placeholder="14:00" />
               </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm">Domingo</span>
-              <div className="flex gap-2">
-                <Input className="w-20" placeholder="11:00" />
-                <span className="self-center">até</span>
-                <Input className="w-20" placeholder="20:00" />
+              <div className="flex gap-2 items-center">
+                <span className="text-sm text-muted-foreground">Fechado</span>
               </div>
             </div>
             <Button>Salvar</Button>
@@ -138,13 +193,33 @@ const Configuracoes = () => {
               <Printer className="h-5 w-5 text-primary" />
               Impressora de Comandas
             </CardTitle>
-            <CardDescription>Configure a impressora térmica</CardDescription>
+            <CardDescription>Configure a impressora térmica Elgin I9</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              A configuração de impressora será habilitada após integração com o sistema.
-            </p>
-            <Button variant="outline" disabled>Configurar Impressora</Button>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Impressão Automática</p>
+                <p className="text-xs text-muted-foreground">
+                  Imprimir comanda ao enviar pedido para a cozinha
+                </p>
+              </div>
+              {loadingSettings ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Switch 
+                  checked={autoPrintEnabled} 
+                  onCheckedChange={handleAutoPrintToggle}
+                  disabled={savingPrint}
+                />
+              )}
+            </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-xs text-muted-foreground">
+                <strong>Nota:</strong> Para impressão direta na Elgin I9 via ESC/POS, 
+                é necessário um servidor de impressão local. A impressão atual usa o 
+                diálogo de impressão do navegador.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
