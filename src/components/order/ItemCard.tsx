@@ -24,7 +24,7 @@ interface ItemCardProps {
   onAddToCart: (item: any, extras: Extra[], tapiocaMolhada: boolean) => void;
 }
 
-// Available extras for lanches
+// Available extras for lanches (cuscuz, tapiocas, pães, etc.)
 const AVAILABLE_EXTRAS: Extra[] = [
   { name: "Carne moída", price: 4 },
   { name: "Ovo", price: 2 },

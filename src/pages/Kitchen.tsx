@@ -59,7 +59,20 @@ const Kitchen = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const printedOrdersRef = useRef<Set<string>>(new Set());
+
+  // Fetch auto-print setting
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await supabase.functions.invoke("settings", {
+        method: "GET",
+      });
+      setAutoPrintEnabled(data?.auto_print_enabled || false);
+    } catch (error) {
+      console.error("Erro ao carregar configurações:", error);
+    }
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -102,8 +115,13 @@ const Kitchen = () => {
     }
   }, [toast]);
 
-  // Auto-print new pending orders
-  const autoPrintPendingOrders = useCallback((newOrders: Order[]) => {
+  // Auto-print new pending orders (only if enabled)
+  const autoPrintPendingOrders = useCallback((newOrders: Order[], shouldPrint: boolean) => {
+    if (!shouldPrint) {
+      console.log("Auto-print disabled, skipping");
+      return;
+    }
+
     newOrders.forEach((order) => {
       if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
         printedOrdersRef.current.add(order.id);
@@ -131,6 +149,7 @@ const Kitchen = () => {
   }, [toast]);
 
   useEffect(() => {
+    fetchSettings();
     fetchOrders();
 
     // Realtime subscription
@@ -141,6 +160,12 @@ const Kitchen = () => {
         { event: "INSERT", schema: "public", table: "orders" },
         async (payload) => {
           console.log("New order inserted:", payload);
+          // Fetch latest settings to check if auto-print is enabled
+          const { data: settings } = await supabase.functions.invoke("settings", {
+            method: "GET",
+          });
+          const shouldPrint = settings?.auto_print_enabled || false;
+          
           // Fetch the complete order with items for printing
           const { data: newOrder } = await supabase
             .from("orders")
@@ -165,7 +190,7 @@ const Kitchen = () => {
             .single();
           
           if (newOrder && newOrder.status === "pending") {
-            autoPrintPendingOrders([newOrder as Order]);
+            autoPrintPendingOrders([newOrder as Order], shouldPrint);
           }
           fetchOrders();
         }
@@ -182,7 +207,7 @@ const Kitchen = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, autoPrintPendingOrders]);
+  }, [fetchOrders, fetchSettings, autoPrintPendingOrders]);
 
   const moveOrder = async (orderId: string, currentStatus: OrderStatus) => {
     const nextStatus = getNextStatus(currentStatus);
