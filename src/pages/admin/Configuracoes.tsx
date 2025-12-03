@@ -18,8 +18,16 @@ import {
   Loader2
 } from "lucide-react";
 
+interface Settings {
+  id: string;
+  auto_print_enabled: boolean;
+  whatsapp_enabled: boolean;
+  webhook_n8n_url: string | null;
+}
+
 const Configuracoes = () => {
   const { toast } = useToast();
+  const [settingsId, setSettingsId] = useState<string | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [webhookN8nUrl, setWebhookN8nUrl] = useState("");
@@ -35,17 +43,43 @@ const Configuracoes = () => {
 
   const fetchSettings = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("settings");
+      // Direct query to settings table using any to bypass type checking
+      // since settings table may not be in generated types yet
+      const { data, error } = await (supabase as any)
+        .from("settings")
+        .select("*")
+        .limit(1)
+        .maybeSingle();
 
       if (error) throw error;
-      setAutoPrintEnabled(data?.auto_print_enabled || false);
-      setWhatsappEnabled(data?.whatsapp_enabled || false);
-      setWebhookN8nUrl(data?.webhook_n8n_url || "");
+
+      if (data) {
+        setSettingsId(data.id);
+        setAutoPrintEnabled(data.auto_print_enabled || false);
+        setWhatsappEnabled(data.whatsapp_enabled || false);
+        setWebhookN8nUrl(data.webhook_n8n_url || "");
+      } else {
+        // Create default settings if none exist
+        const { data: newSettings, error: insertError } = await (supabase as any)
+          .from("settings")
+          .insert({
+            auto_print_enabled: false,
+            whatsapp_enabled: false,
+            webhook_n8n_url: null
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        if (newSettings) {
+          setSettingsId(newSettings.id);
+        }
+      }
     } catch (error: any) {
       console.error("Erro ao carregar configurações:", error);
       toast({
         title: "Erro ao carregar configurações",
-        description: "Verifique se as Edge Functions foram implantadas. Aguarde alguns segundos e recarregue a página.",
+        description: error.message || "Tente novamente",
         variant: "destructive",
       });
     } finally {
@@ -53,15 +87,33 @@ const Configuracoes = () => {
     }
   };
 
+  const updateSettings = async (updates: Partial<Settings>) => {
+    if (!settingsId) {
+      toast({
+        title: "Erro",
+        description: "Configurações não encontradas",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const { error } = await (supabase as any)
+      .from("settings")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", settingsId);
+
+    if (error) {
+      console.error("Erro ao atualizar configurações:", error);
+      throw error;
+    }
+
+    return true;
+  };
+
   const handleAutoPrintToggle = async (enabled: boolean) => {
     setSavingPrint(true);
     try {
-      const { error } = await supabase.functions.invoke("settings", {
-        body: { auto_print_enabled: enabled },
-      });
-
-      if (error) throw error;
-
+      await updateSettings({ auto_print_enabled: enabled });
       setAutoPrintEnabled(enabled);
       toast({
         title: enabled ? "Impressão automática ativada" : "Impressão automática desativada",
@@ -70,7 +122,6 @@ const Configuracoes = () => {
           : "Use o botão 'Imprimir Comanda' para imprimir manualmente",
       });
     } catch (error: any) {
-      console.error("Erro ao salvar configuração:", error);
       toast({
         title: "Erro ao salvar",
         description: error.message || "Tente novamente",
@@ -78,6 +129,98 @@ const Configuracoes = () => {
       });
     } finally {
       setSavingPrint(false);
+    }
+  };
+
+  const handleWhatsappToggle = async (enabled: boolean) => {
+    setSavingWhatsapp(true);
+    try {
+      await updateSettings({ whatsapp_enabled: enabled });
+      setWhatsappEnabled(enabled);
+      toast({
+        title: enabled ? "WhatsApp ativado" : "WhatsApp desativado",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingWhatsapp(false);
+    }
+  };
+
+  const handleSaveWebhook = async () => {
+    setSavingWhatsapp(true);
+    try {
+      await updateSettings({ webhook_n8n_url: webhookN8nUrl });
+      toast({
+        title: "Webhook salvo",
+        description: "URL do N8N atualizada com sucesso",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingWhatsapp(false);
+    }
+  };
+
+  const handleTestWhatsapp = async () => {
+    setTestingWhatsapp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+        body: { to: "5588988803368", text: "Teste de conexão - Sabor de Mãe 🍴" }
+      });
+      if (error) throw error;
+      toast({
+        title: "Mensagem enviada!",
+        description: "Verifique o WhatsApp de destino",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao enviar",
+        description: error.message || "Verifique se a Edge Function whatsapp-send está implantada",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingWhatsapp(false);
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    setTestingWebhook(true);
+    try {
+      const response = await fetch(webhookN8nUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: '5588000000000',
+          message: 'Teste de conexão',
+          type: 'test',
+          timestamp: new Date().toISOString()
+        })
+      });
+      if (response.ok) {
+        toast({
+          title: "Conexão OK!",
+          description: "N8N respondeu corretamente",
+        });
+      } else {
+        throw new Error(`Status: ${response.status}`);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro na conexão",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setTestingWebhook(false);
     }
   };
 
@@ -188,27 +331,7 @@ const Configuracoes = () => {
               ) : (
                 <Switch 
                   checked={whatsappEnabled} 
-                  onCheckedChange={async (enabled) => {
-                    setSavingWhatsapp(true);
-                    try {
-                      const { error } = await supabase.functions.invoke("settings", {
-                        body: { whatsapp_enabled: enabled },
-                      });
-                      if (error) throw error;
-                      setWhatsappEnabled(enabled);
-                      toast({
-                        title: enabled ? "WhatsApp ativado" : "WhatsApp desativado",
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: "Erro ao salvar",
-                        description: error.message,
-                        variant: "destructive",
-                      });
-                    } finally {
-                      setSavingWhatsapp(false);
-                    }
-                  }}
+                  onCheckedChange={handleWhatsappToggle}
                   disabled={savingWhatsapp}
                 />
               )}
@@ -228,27 +351,7 @@ const Configuracoes = () => {
               variant="outline" 
               size="sm"
               disabled={testingWhatsapp}
-              onClick={async () => {
-                setTestingWhatsapp(true);
-                try {
-                  const { data, error } = await supabase.functions.invoke("whatsapp-send", {
-                    body: { to: "5588988803368", text: "Teste de conexão - Sabor de Mãe 🍴" }
-                  });
-                  if (error) throw error;
-                  toast({
-                    title: "Mensagem enviada!",
-                    description: "Verifique o WhatsApp de destino",
-                  });
-                } catch (error: any) {
-                  toast({
-                    title: "Erro ao enviar",
-                    description: error.message,
-                    variant: "destructive",
-                  });
-                } finally {
-                  setTestingWhatsapp(false);
-                }
-              }}
+              onClick={handleTestWhatsapp}
             >
               {testingWhatsapp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Enviar Mensagem de Teste
@@ -280,27 +383,7 @@ const Configuracoes = () => {
             
             <div className="flex gap-2">
               <Button 
-                onClick={async () => {
-                    setSavingWhatsapp(true);
-                  try {
-                    const { error } = await supabase.functions.invoke("settings", {
-                      body: { webhook_n8n_url: webhookN8nUrl },
-                    });
-                    if (error) throw error;
-                    toast({
-                      title: "Webhook salvo",
-                      description: "URL do N8N atualizada com sucesso",
-                    });
-                  } catch (error: any) {
-                    toast({
-                      title: "Erro ao salvar",
-                      description: error.message,
-                      variant: "destructive",
-                    });
-                  } finally {
-                    setSavingWhatsapp(false);
-                  }
-                }}
+                onClick={handleSaveWebhook}
                 disabled={savingWhatsapp}
               >
                 {savingWhatsapp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -310,37 +393,7 @@ const Configuracoes = () => {
               <Button 
                 variant="outline"
                 disabled={!webhookN8nUrl || testingWebhook}
-                onClick={async () => {
-                  setTestingWebhook(true);
-                  try {
-                    const response = await fetch(webhookN8nUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        phone: '5588000000000',
-                        message: 'Teste de conexão',
-                        type: 'test',
-                        timestamp: new Date().toISOString()
-                      })
-                    });
-                    if (response.ok) {
-                      toast({
-                        title: "Conexão OK!",
-                        description: "N8N respondeu corretamente",
-                      });
-                    } else {
-                      throw new Error(`Status: ${response.status}`);
-                    }
-                  } catch (error: any) {
-                    toast({
-                      title: "Erro na conexão",
-                      description: error.message,
-                      variant: "destructive",
-                    });
-                  } finally {
-                    setTestingWebhook(false);
-                  }
-                }}
+                onClick={handleTestWebhook}
               >
                 {testingWebhook ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Testar Conexão
