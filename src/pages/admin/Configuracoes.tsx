@@ -359,12 +359,24 @@ const Configuracoes = () => {
             </div>
             
             <div className="space-y-2">
-              <Label>URL do Webhook de Entrada</Label>
-              <div className="p-2 bg-muted rounded text-xs font-mono break-all">
-                {`https://napgcbrouifczxblteuw.supabase.co/functions/v1/whatsapp-incoming`}
+              <Label>URL do Webhook de Entrada (Evolution API)</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 p-2 bg-muted rounded text-xs font-mono break-all select-all">
+                  https://napgcbrouifczxblteuw.supabase.co/functions/v1/whatsapp-recebido
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText("https://napgcbrouifczxblteuw.supabase.co/functions/v1/whatsapp-recebido");
+                    toast({ title: "Copiado!", description: "URL do webhook copiada" });
+                  }}
+                >
+                  Copiar
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Configure esta URL no painel da Evolution API como webhook de mensagens
+                Configure esta URL no painel da Evolution API → Configurações → Webhook → Events: messages.upsert
               </p>
             </div>
 
