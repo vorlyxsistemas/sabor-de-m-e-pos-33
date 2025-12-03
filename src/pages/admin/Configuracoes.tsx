@@ -21,8 +21,13 @@ import {
 const Configuracoes = () => {
   const { toast } = useToast();
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [webhookN8nUrl, setWebhookN8nUrl] = useState("");
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [savingPrint, setSavingPrint] = useState(false);
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [testingWhatsapp, setTestingWhatsapp] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -36,6 +41,8 @@ const Configuracoes = () => {
 
       if (error) throw error;
       setAutoPrintEnabled(data?.auto_print_enabled || false);
+      setWhatsappEnabled(data?.whatsapp_enabled || false);
+      setWebhookN8nUrl(data?.webhook_n8n_url || "");
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
     } finally {
@@ -159,29 +166,185 @@ const Configuracoes = () => {
           </CardContent>
         </Card>
 
-        {/* Integrações */}
+        {/* Integrações WhatsApp */}
         <Card className="shadow-soft">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
-              Integrações
+              WhatsApp (Evolution API)
             </CardTitle>
-            <CardDescription>WhatsApp e outros serviços</CardDescription>
+            <CardDescription>Integração com WhatsApp para receber e enviar mensagens</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium">WhatsApp</p>
-                <p className="text-xs text-muted-foreground">Evolution API</p>
+                <p className="font-medium">Ativar WhatsApp</p>
+                <p className="text-xs text-muted-foreground">Receber mensagens de clientes</p>
               </div>
-              <Switch disabled />
+              {loadingSettings ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Switch 
+                  checked={whatsappEnabled} 
+                  onCheckedChange={async (enabled) => {
+                    setSavingWhatsapp(true);
+                    try {
+                      const { error } = await supabase.functions.invoke("settings", {
+                        method: "POST",
+                        body: { whatsapp_enabled: enabled },
+                      });
+                      if (error) throw error;
+                      setWhatsappEnabled(enabled);
+                      toast({
+                        title: enabled ? "WhatsApp ativado" : "WhatsApp desativado",
+                      });
+                    } catch (error: any) {
+                      toast({
+                        title: "Erro ao salvar",
+                        description: error.message,
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setSavingWhatsapp(false);
+                    }
+                  }}
+                  disabled={savingWhatsapp}
+                />
+              )}
             </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Agente Sofia (IA)</p>
-                <p className="text-xs text-muted-foreground">N8N + Lovable</p>
+            
+            <div className="space-y-2">
+              <Label>URL do Webhook de Entrada</Label>
+              <div className="p-2 bg-muted rounded text-xs font-mono break-all">
+                {`https://napgcbrouifczxblteuw.supabase.co/functions/v1/whatsapp-incoming`}
               </div>
-              <Switch disabled />
+              <p className="text-xs text-muted-foreground">
+                Configure esta URL no painel da Evolution API como webhook de mensagens
+              </p>
+            </div>
+
+            <Button 
+              variant="outline" 
+              size="sm"
+              disabled={testingWhatsapp}
+              onClick={async () => {
+                setTestingWhatsapp(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+                    body: { to: "5588988803368", text: "Teste de conexão - Sabor de Mãe 🍴" }
+                  });
+                  if (error) throw error;
+                  toast({
+                    title: "Mensagem enviada!",
+                    description: "Verifique o WhatsApp de destino",
+                  });
+                } catch (error: any) {
+                  toast({
+                    title: "Erro ao enviar",
+                    description: error.message,
+                    variant: "destructive",
+                  });
+                } finally {
+                  setTestingWhatsapp(false);
+                }
+              }}
+            >
+              {testingWhatsapp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Enviar Mensagem de Teste
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Webhook N8N */}
+        <Card className="shadow-soft">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Agente Sofia (N8N)
+            </CardTitle>
+            <CardDescription>Configure o webhook do agente de IA</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>URL do Webhook N8N</Label>
+              <Input 
+                placeholder="https://seu-n8n.com/webhook/xxx"
+                value={webhookN8nUrl}
+                onChange={(e) => setWebhookN8nUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                URL do webhook N8N que receberá as mensagens do WhatsApp
+              </p>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                onClick={async () => {
+                  setSavingWhatsapp(true);
+                  try {
+                    const { error } = await supabase.functions.invoke("settings", {
+                      method: "POST",
+                      body: { webhook_n8n_url: webhookN8nUrl },
+                    });
+                    if (error) throw error;
+                    toast({
+                      title: "Webhook salvo",
+                      description: "URL do N8N atualizada com sucesso",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Erro ao salvar",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setSavingWhatsapp(false);
+                  }
+                }}
+                disabled={savingWhatsapp}
+              >
+                {savingWhatsapp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Salvar
+              </Button>
+              
+              <Button 
+                variant="outline"
+                disabled={!webhookN8nUrl || testingWebhook}
+                onClick={async () => {
+                  setTestingWebhook(true);
+                  try {
+                    const response = await fetch(webhookN8nUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        phone: '5588000000000',
+                        message: 'Teste de conexão',
+                        type: 'test',
+                        timestamp: new Date().toISOString()
+                      })
+                    });
+                    if (response.ok) {
+                      toast({
+                        title: "Conexão OK!",
+                        description: "N8N respondeu corretamente",
+                      });
+                    } else {
+                      throw new Error(`Status: ${response.status}`);
+                    }
+                  } catch (error: any) {
+                    toast({
+                      title: "Erro na conexão",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setTestingWebhook(false);
+                  }
+                }}
+              >
+                {testingWebhook ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Testar Conexão
+              </Button>
             </div>
           </CardContent>
         </Card>
