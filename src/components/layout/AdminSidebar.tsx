@@ -11,6 +11,7 @@ import {
   ChefHat,
   Settings,
   LogOut,
+  PlusCircle,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -39,7 +40,8 @@ const menuItems = [
 
 const operationItems = [
   { title: 'Pedidos', url: '/admin/pedidos', icon: ClipboardList },
-  { title: 'Cozinha', url: '/kitchen', icon: ChefHat },
+  { title: 'Cozinha', url: '/admin/kanban', icon: ChefHat },
+  { title: 'Novo Pedido', url: '/orders/new', icon: PlusCircle },
 ];
 
 export function AdminSidebar() {

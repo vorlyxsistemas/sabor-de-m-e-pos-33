@@ -21,6 +21,7 @@ import DeliveryZones from "./pages/admin/DeliveryZones";
 import Users from "./pages/admin/Users";
 import Pedidos from "./pages/admin/Pedidos";
 import Configuracoes from "./pages/admin/Configuracoes";
+import Kanban from "./pages/admin/Kanban";
 
 // Staff/Shared Pages
 import Kitchen from "./pages/Kitchen";
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><Users /></ProtectedRoute>} />
             <Route path="/admin/pedidos" element={<ProtectedRoute allowedRoles={['admin']}><Pedidos /></ProtectedRoute>} />
             <Route path="/admin/configuracoes" element={<ProtectedRoute allowedRoles={['admin']}><Configuracoes /></ProtectedRoute>} />
+            <Route path="/admin/kanban" element={<ProtectedRoute allowedRoles={['admin']}><Kanban /></ProtectedRoute>} />
 
             {/* Staff Routes */}
             <Route path="/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Kitchen /></ProtectedRoute>} />
