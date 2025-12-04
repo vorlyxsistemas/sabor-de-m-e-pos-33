@@ -4,8 +4,10 @@ import { DataTable } from "@/components/shared/DataTable";
 import { Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useNavigate } from "react-router-dom";
 
 const Pedidos = () => {
+  const navigate = useNavigate();
   const columns = [
     { key: "numero", label: "Nº Pedido" },
     { key: "cliente", label: "Cliente" },
@@ -22,7 +24,7 @@ const Pedidos = () => {
       <PageHeader
         title="Todos os Pedidos"
         description="Visualize e gerencie todos os pedidos da lanchonete"
-        action={{ label: "Novo Pedido" }}
+        action={{ label: "Novo Pedido", onClick: () => navigate("/orders/new") }}
       />
 
       {/* Filters */}
