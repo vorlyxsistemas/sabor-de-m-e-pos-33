@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { StaffLayout } from "@/components/layout/StaffLayout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +43,7 @@ interface LunchCartItem {
 const NewOrder = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
   const [categories, setCategories] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -209,7 +212,7 @@ const NewOrder = () => {
       await supabase.from('order_items').insert(orderItems);
 
       toast({ title: "Pedido criado com sucesso!" });
-      navigate('/kitchen');
+      navigate(isAdmin ? '/admin/kanban' : '/kitchen');
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } finally {
@@ -217,16 +220,18 @@ const NewOrder = () => {
     }
   };
 
+  const Layout = isAdmin ? AdminLayout : StaffLayout;
+
   if (loading) {
     return (
-      <StaffLayout title="Novo Pedido" subtitle="Criar pedido">
+      <Layout title="Novo Pedido" subtitle="Criar pedido">
         <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
-      </StaffLayout>
+      </Layout>
     );
   }
 
   return (
-    <StaffLayout title="Novo Pedido" subtitle="Montar pedido">
+    <Layout title="Novo Pedido" subtitle="Montar pedido">
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Menu */}
         <div className="lg:col-span-2 space-y-4">
@@ -401,7 +406,7 @@ const NewOrder = () => {
           </Card>
         </div>
       </div>
-    </StaffLayout>
+    </Layout>
   );
 };
 
