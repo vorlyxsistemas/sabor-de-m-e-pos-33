@@ -21,7 +21,7 @@ function getDayOfWeek(): number {
   return brazilTime.getUTCDay()
 }
 
-// Check if store is open from settings table (manual control)
+// Check if store is open from settings table (manual control ONLY)
 async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
   const { data: settings, error } = await supabase
     .from('settings')
@@ -29,14 +29,21 @@ async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: st
     .limit(1)
     .maybeSingle()
 
+  console.log('Store status check - settings:', settings, 'error:', error)
+
   if (error) {
     console.error('Error checking store status:', error)
-    // Default to open if can't check settings
+    // Default to open if can't check settings (so admin can fix)
     return { open: true }
   }
 
-  // If is_open is null or undefined, default to closed for safety
-  const isOpen = settings?.is_open ?? false
+  // If no settings row exists or is_open is null, default to OPEN (admin controls manually)
+  if (!settings || settings.is_open === null || settings.is_open === undefined) {
+    console.log('No is_open setting found, defaulting to OPEN')
+    return { open: true }
+  }
+
+  const isOpen = settings.is_open === true
 
   if (!isOpen) {
     return { 
