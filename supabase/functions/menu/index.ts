@@ -22,7 +22,34 @@ function getDayOfWeek(): number {
   return brazilTime.getUTCDay() // 0 = Sunday
 }
 
-// Time-based category filtering rules
+// Check if store is open from settings table (manual control)
+async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
+  const { data: settings, error } = await supabase
+    .from('settings')
+    .select('is_open')
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error checking store status:', error)
+    // Default to open if can't check settings
+    return { open: true }
+  }
+
+  // If is_open is null or undefined, default to closed for safety
+  const isOpen = settings?.is_open ?? false
+
+  if (!isOpen) {
+    return { 
+      open: false, 
+      message: 'A lanchonete está fechada no momento. Entre em contato conosco para mais informações.' 
+    }
+  }
+
+  return { open: true }
+}
+
+// Time-based category filtering rules (optional, still applies when open)
 interface TimeRestriction {
   category: string
   availableUntil?: number // Hour until available (exclusive)
@@ -64,38 +91,24 @@ Deno.serve(async (req) => {
 
     console.log('Fetching menu, category:', categoryId, 'includeUnavailable:', includeUnavailable, 'currentHour:', currentHour, 'dayOfWeek:', dayOfWeek)
 
-    // Sunday = closed
-    if (dayOfWeek === 0 && !skipTimeCheck) {
-      return new Response(
-        JSON.stringify({ 
-          data: {
-            categories: [],
-            items: [],
-            menu_by_category: [],
-            global_extras: [],
-            closed: true,
-            message: 'Fechado aos domingos'
-          }
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // After 14h = closed
-    if (currentHour >= 14 && !skipTimeCheck) {
-      return new Response(
-        JSON.stringify({ 
-          data: {
-            categories: [],
-            items: [],
-            menu_by_category: [],
-            global_extras: [],
-            closed: true,
-            message: 'Fechado - Nosso horário é de 7h às 14h'
-          }
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    // Check if store is open (manual control via settings)
+    if (!skipTimeCheck) {
+      const storeStatus = await isStoreOpen(supabase)
+      if (!storeStatus.open) {
+        return new Response(
+          JSON.stringify({ 
+            data: {
+              categories: [],
+              items: [],
+              menu_by_category: [],
+              global_extras: [],
+              closed: true,
+              message: storeStatus.message
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // Fetch categories
@@ -145,7 +158,7 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('weekday', dayOfWeek)
 
-    // Apply time-based filtering
+    // Apply time-based category filtering (optional, still applies when store is open)
     let filteredItems = items || []
     const categoryMessages: Record<string, string> = {}
 

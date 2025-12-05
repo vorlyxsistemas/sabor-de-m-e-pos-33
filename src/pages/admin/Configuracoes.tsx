@@ -15,7 +15,9 @@ import {
   MessageSquare, 
   Printer,
   Bell,
-  Loader2
+  Loader2,
+  Power,
+  PowerOff
 } from "lucide-react";
 
 interface Settings {
@@ -23,6 +25,7 @@ interface Settings {
   auto_print_enabled: boolean;
   whatsapp_enabled: boolean;
   webhook_n8n_url: string | null;
+  is_open: boolean;
 }
 
 const Configuracoes = () => {
@@ -37,6 +40,8 @@ const Configuracoes = () => {
   const [savingWhatsapp, setSavingWhatsapp] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [testingWhatsapp, setTestingWhatsapp] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [togglingOpen, setTogglingOpen] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -59,6 +64,7 @@ const Configuracoes = () => {
         setAutoPrintEnabled(data.auto_print_enabled || false);
         setWhatsappEnabled(data.whatsapp_enabled || false);
         setWebhookN8nUrl(data.webhook_n8n_url || "");
+        setIsOpen(data.is_open ?? false);
       } else {
         // Create default settings if none exist
         const { data: newSettings, error: insertError } = await (supabase as any)
@@ -66,7 +72,8 @@ const Configuracoes = () => {
           .insert({
             auto_print_enabled: false,
             whatsapp_enabled: false,
-            webhook_n8n_url: null
+            webhook_n8n_url: null,
+            is_open: false
           })
           .select()
           .single();
@@ -245,12 +252,79 @@ const Configuracoes = () => {
     }
   };
 
+  const handleToggleOpen = async () => {
+    setTogglingOpen(true);
+    try {
+      const newIsOpen = !isOpen;
+      await updateSettings({ is_open: newIsOpen } as any);
+      setIsOpen(newIsOpen);
+      toast({
+        title: newIsOpen ? "🟢 Lanchonete ABERTA" : "🔴 Lanchonete FECHADA",
+        description: newIsOpen 
+          ? "Clientes podem fazer pedidos agora"
+          : "Pedidos bloqueados até você abrir novamente",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao alterar status",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingOpen(false);
+    }
+  };
+
   return (
     <AdminLayout title="Configurações" subtitle="Configurações do sistema">
       <PageHeader
         title="Configurações"
         description="Configure os parâmetros do sistema"
       />
+
+      {/* Status da Lanchonete - Card Destacado */}
+      <Card className={`mb-6 border-2 ${isOpen ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-red-500 bg-red-50 dark:bg-red-950/20'}`}>
+        <CardContent className="py-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}>
+                {isOpen ? (
+                  <Power className="h-8 w-8 text-white" />
+                ) : (
+                  <PowerOff className="h-8 w-8 text-white" />
+                )}
+              </div>
+              <div>
+                <h2 className={`text-2xl font-bold ${isOpen ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                  {isOpen ? "Lanchonete ABERTA" : "Lanchonete FECHADA"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {isOpen 
+                    ? "Clientes podem fazer pedidos pelo WhatsApp e sistema"
+                    : "Pedidos estão bloqueados - Sofia informará que está fechado"
+                  }
+                </p>
+              </div>
+            </div>
+            <Button 
+              size="lg"
+              variant={isOpen ? "destructive" : "default"}
+              onClick={handleToggleOpen}
+              disabled={togglingOpen || loadingSettings}
+              className="min-w-[160px]"
+            >
+              {togglingOpen ? (
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              ) : isOpen ? (
+                <PowerOff className="h-5 w-5 mr-2" />
+              ) : (
+                <Power className="h-5 w-5 mr-2" />
+              )}
+              {isOpen ? "FECHAR" : "ABRIR"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Dados da Loja */}
