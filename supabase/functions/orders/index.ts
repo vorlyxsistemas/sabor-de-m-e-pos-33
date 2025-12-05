@@ -60,23 +60,37 @@ function isCategoryAvailable(categoryName: string): { available: boolean; messag
   return { available: true }
 }
 
+interface OrderItemExtra {
+  code?: string
+  id?: string
+  name?: string
+  price?: number
+}
+
 interface OrderItem {
   item_id: string
   quantity: number
+  price?: number
   tapioca_molhada?: boolean
-  extras?: { code: string }[]
+  extras?: OrderItemExtra[]
 }
 
+// Support both formats: nested object OR separate fields (for Sofia AI compatibility)
 interface CreateOrderBody {
   customer_name: string
   customer_phone?: string
   order_type: 'local' | 'retirada' | 'entrega'
-  address?: {
+  // Nested address format (original)
+  address?: string | {
     street?: string
     bairro?: string
     cep?: string
     reference?: string
   }
+  // Flat address fields (Sofia AI format)
+  bairro?: string
+  cep?: string
+  reference?: string
   scheduled_for?: string
   items: OrderItem[]
   payment_method?: string
@@ -157,6 +171,27 @@ Deno.serve(async (req) => {
       const body: CreateOrderBody = await req.json()
       
       console.log('Creating new order:', JSON.stringify(body))
+
+      // Normalize address: support both flat fields (Sofia) and nested object (original)
+      // Extract bairro from flat field or nested address
+      let bairro: string | undefined
+      let cep: string | undefined
+      let reference: string | undefined
+      let addressStr: string | undefined
+
+      if (body.bairro) {
+        // Sofia AI format: flat fields
+        bairro = body.bairro
+        cep = body.cep
+        reference = body.reference
+        addressStr = typeof body.address === 'string' ? body.address : undefined
+      } else if (body.address && typeof body.address === 'object') {
+        // Original format: nested object
+        bairro = body.address.bairro
+        cep = body.address.cep
+        reference = body.address.reference
+        addressStr = body.address.street
+      }
 
       // RULE 1: Check business hours
       const skipHoursCheck = url.searchParams.get('skip_hours_check') === 'true'
@@ -259,19 +294,37 @@ Deno.serve(async (req) => {
           console.log(`Applied tapioca molhada to ${dbItem.name}: +R$1.00`)
         }
 
-        // RULE 5: Apply extras (OVO = R$2 for Lanches/Tapiocas, CARNE_EXTRA = R$6 for Almoço)
+        // RULE 5: Apply extras - Support both formats:
+        // Old: {code: string} - look up in DB
+        // Sofia: {id?: string, name?: string, price?: number} - can use provided price or look up
         if (orderItem.extras && orderItem.extras.length > 0 && dbItem.allow_extras) {
           const categoryName = dbItem.category?.name || ''
           
           for (const extra of orderItem.extras) {
+            // Determine the extra identifier (code, name, or id)
+            const extraCode = extra.code || extra.name || extra.id
+
+            // If Sofia provided name and price directly, use them
+            if (extra.name && extra.price !== undefined) {
+              itemExtrasPrice += Number(extra.price)
+              appliedExtras.push({ name: extra.name, price: Number(extra.price) })
+              console.log(`Applied Sofia extra ${extra.name} to ${dbItem.name}: +R$${extra.price}`)
+              continue
+            }
+
+            if (!extraCode) continue
+
             // Check global extras
-            const globalExtra = globalExtras?.find(e => e.code === extra.code)
+            const globalExtra = globalExtras?.find(e => 
+              e.code === extraCode || e.name === extraCode || e.id === extraCode
+            )
             if (globalExtra) {
               // Check if extra applies to this category
               if (!globalExtra.applies_to_category || globalExtra.applies_to_category === categoryName) {
                 itemExtrasPrice += Number(globalExtra.price)
                 appliedExtras.push({ name: globalExtra.name, price: Number(globalExtra.price) })
                 console.log(`Applied global extra ${globalExtra.name} to ${dbItem.name}: +R$${globalExtra.price}`)
+                continue
               }
             }
 
@@ -280,7 +333,7 @@ Deno.serve(async (req) => {
               .from('extras')
               .select('*')
               .eq('item_id', dbItem.id)
-              .eq('name', extra.code)
+              .or(`name.eq.${extraCode},id.eq.${extraCode}`)
 
             if (itemExtras && itemExtras.length > 0) {
               for (const ie of itemExtras) {
@@ -308,7 +361,7 @@ Deno.serve(async (req) => {
       // RULE 6: Calculate delivery fee
       let deliveryFee = 0
       if (body.order_type === 'entrega') {
-        if (!body.address?.bairro) {
+        if (!bairro) {
           return new Response(
             JSON.stringify({ error: 'Bairro é obrigatório para entregas' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -316,7 +369,7 @@ Deno.serve(async (req) => {
         }
 
         const { data: taxaData, error: taxaError } = await supabase
-          .rpc('get_taxa_by_bairro', { bairro_in: body.address.bairro })
+          .rpc('get_taxa_by_bairro', { bairro_in: bairro })
 
         if (taxaError) {
           console.error('Error getting taxa:', taxaError)
@@ -333,12 +386,20 @@ Deno.serve(async (req) => {
         }
 
         deliveryFee = Number(taxaData[0].taxa) || 0
-        console.log(`Delivery fee for ${body.address.bairro}: R$${deliveryFee}`)
+        console.log(`Delivery fee for ${bairro}: R$${deliveryFee}`)
       }
 
       const total = subtotal + deliveryFee
 
       console.log(`Order totals - Subtotal: R$${subtotal}, Extras: R$${extrasTotal}, Delivery: R$${deliveryFee}, Total: R$${total}`)
+
+      // Build address object for storage
+      const addressData = bairro ? {
+        street: addressStr,
+        bairro,
+        cep,
+        reference
+      } : null
 
       // Create order
       const { data: order, error: orderError } = await supabase
@@ -347,15 +408,16 @@ Deno.serve(async (req) => {
           customer_name: body.customer_name,
           customer_phone: body.customer_phone || null,
           order_type: body.order_type || 'local',
-          address: body.address ? JSON.stringify(body.address) : null,
-          cep: body.address?.cep || null,
-          reference: body.address?.reference || null,
+          address: addressData ? JSON.stringify(addressData) : null,
+          cep: cep || null,
+          reference: reference || null,
           scheduled_for: body.scheduled_for || null,
           delivery_tax: deliveryFee,
           extras_fee: extrasTotal,
           subtotal: subtotal,
           total: total,
           status: 'pending'
+          // Note: payment_method not saved yet - column doesn't exist in DB
         })
         .select()
         .single()
