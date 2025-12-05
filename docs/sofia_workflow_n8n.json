@@ -1,0 +1,305 @@
+{
+  "name": "Sofia - Atendimento WhatsApp Sabor de Mãe",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sofia_robusta",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "sofia_robusta"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://wkogyrtwrqvrcsbpxyft.supabase.co/functions/v1/menu",
+        "options": {}
+      },
+      "id": "get-menu",
+      "name": "Buscar Cardápio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://wkogyrtwrqvrcsbpxyft.supabase.co/functions/v1/lunch-today",
+        "options": {}
+      },
+      "id": "get-lunch",
+      "name": "Buscar Almoço do Dia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://wkogyrtwrqvrcsbpxyft.supabase.co/functions/v1/delivery",
+        "options": {}
+      },
+      "id": "get-delivery",
+      "name": "Buscar Taxas Entrega",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ JSON.stringify({ menu: $('Buscar Cardápio').item.json, lunch: $('Buscar Almoço do Dia').item.json, delivery: $('Buscar Taxas Entrega').item.json, customer_phone: $('Webhook WhatsApp').item.json.body.from, customer_message: $('Webhook WhatsApp').item.json.body.message?.text || $('Webhook WhatsApp').item.json.body.text }) }}",
+        "options": {}
+      },
+      "id": "merge-data",
+      "name": "Consolidar Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Telefone do cliente: {{ $json.customer_phone }}\nMensagem do cliente: {{ $json.customer_message }}\n\nDados do sistema:\n{{ JSON.stringify($json, null, 2) }}",
+        "options": {
+          "systemMessage": "Você é SOFIA, assistente virtual do restaurante Sabor de Mãe em Juazeiro do Norte - CE.\n\n## PERSONALIDADE\n- Simpática, acolhedora e eficiente\n- Use linguagem informal mas respeitosa\n- Responda de forma concisa e clara\n- Use emojis com moderação 🍽️\n\n## HORÁRIO DE FUNCIONAMENTO\n- Segunda a Sábado: 7h às 14h\n- Domingo: FECHADO\n- Lanches: disponíveis até 10h\n- Almoço: disponível a partir das 11h até 14h\n\n## CARDÁPIO\nUse os dados de 'menu' para informar itens disponíveis, preços e categorias.\nCategorias incluem: Lanches, Tapiocas, Cuscuz, Pães Recheados, Bebidas, Almoço.\n\n## ALMOÇO DO DIA\nUse os dados de 'lunch' para informar:\n- Bases disponíveis (Arroz e feijão R$14, Baião R$15-16)\n- Carnes do dia (variam conforme o dia da semana)\n- O almoço inclui 2 carnes sem custo adicional\n- Carne extra: R$6 cada\n- Acompanhamentos gratuitos: Macarrão, Farofa, Macaxeira, Salada\n\n## EXTRAS\n- Ovo: R$2 (tapiocas, lanches, cuscuz)\n- Molhada: R$1 (tapiocas com caldo)\n- Carne moída: R$4 (cuscuz, lanches)\n- Queijo: R$3 (cuscuz, lanches)\n\n## TIPOS DE PEDIDO\n1. LOCAL - cliente come no restaurante\n2. RETIRADA - cliente busca no balcão\n3. ENTREGA - delivery (consultar taxa por bairro)\n\n## TAXAS DE ENTREGA\nUse os dados de 'delivery' para informar taxa por bairro.\nAlguns bairros têm entrega grátis (taxa = 0).\n\n## FLUXO DE ATENDIMENTO\n1. Cumprimente o cliente\n2. Pergunte o que deseja pedir\n3. Confirme cada item com quantidade e extras\n4. Pergunte tipo de pedido (local/retirada/entrega)\n5. Se entrega: pergunte bairro e endereço completo\n6. Confirme pedido completo com valores\n7. Pergunte forma de pagamento (Pix, Dinheiro, Cartão)\n8. Ao confirmar, use a tool 'criar_pedido' para registrar\n9. Informe que o pedido foi enviado para a cozinha\n\n## REGRAS IMPORTANTES\n- NUNCA invente preços, sempre consulte os dados do sistema\n- Se item não estiver disponível, informe e sugira alternativa\n- Fora do horário: informe que está fechado\n- Domingo: informe que não abre\n- Calcule o total mas o sistema recalcula server-side\n\n## CANCELAMENTO\n- Cliente pode cancelar até 10 minutos após criar o pedido\n- Após isso, pedido já foi para cozinha"
+        }
+      },
+      "id": "ai-agent",
+      "name": "Sofia AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "openai-chat",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [900, 620],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURE_YOUR_OPENAI_CREDENTIALS",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "criar_pedido",
+        "description": "Cria um novo pedido no sistema do restaurante. Use quando o cliente confirmar o pedido completo.",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"customer_name\": {\n      \"type\": \"string\",\n      \"description\": \"Nome do cliente\"\n    },\n    \"customer_phone\": {\n      \"type\": \"string\",\n      \"description\": \"Telefone do cliente no formato 5588999999999\"\n    },\n    \"order_type\": {\n      \"type\": \"string\",\n      \"enum\": [\"LOCAL\", \"RETIRADA\", \"ENTREGA\"],\n      \"description\": \"Tipo do pedido\"\n    },\n    \"items\": {\n      \"type\": \"array\",\n      \"description\": \"Lista de itens do pedido\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"item_id\": { \"type\": \"string\" },\n          \"quantity\": { \"type\": \"integer\" },\n          \"notes\": { \"type\": \"string\" },\n          \"extras\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"object\",\n              \"properties\": {\n                \"extra_id\": { \"type\": \"string\" },\n                \"quantity\": { \"type\": \"integer\" }\n              }\n            }\n          }\n        }\n      }\n    },\n    \"delivery_address\": {\n      \"type\": \"string\",\n      \"description\": \"Endereço de entrega (obrigatório se order_type = ENTREGA)\"\n    },\n    \"delivery_neighborhood\": {\n      \"type\": \"string\",\n      \"description\": \"Bairro para entrega (obrigatório se order_type = ENTREGA)\"\n    },\n    \"payment_method\": {\n      \"type\": \"string\",\n      \"enum\": [\"PIX\", \"DINHEIRO\", \"CARTAO\"],\n      \"description\": \"Forma de pagamento\"\n    },\n    \"notes\": {\n      \"type\": \"string\",\n      \"description\": \"Observações gerais do pedido\"\n    }\n  },\n  \"required\": [\"customer_name\", \"customer_phone\", \"order_type\", \"items\", \"payment_method\"]\n}"
+      },
+      "id": "tool-criar-pedido",
+      "name": "Tool Criar Pedido",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1060, 620]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wkogyrtwrqvrcsbpxyft.supabase.co/functions/v1/orders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "action",
+              "value": "create"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-criar-pedido",
+      "name": "HTTP Criar Pedido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 780]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wkogyrtwrqvrcsbpxyft.supabase.co/functions/v1/whatsapp-send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"{{ $('Webhook WhatsApp').item.json.body.from }}\",\n  \"text\": \"{{ $('Sofia AI Agent').item.json.output }}\",\n  \"type\": \"text\"\n}",
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true }",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1360, 400]
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Buscar Cardápio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Buscar Almoço do Dia",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Buscar Taxas Entrega",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Cardápio": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Almoço do Dia": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Taxas Entrega": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar Dados": {
+      "main": [
+        [
+          {
+            "node": "Sofia AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sofia AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Sofia AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Criar Pedido": {
+      "ai_tool": [
+        [
+          {
+            "node": "Sofia AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "WhatsApp",
+      "id": "whatsapp"
+    },
+    {
+      "name": "AI Agent",
+      "id": "ai-agent"
+    }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
