@@ -21,7 +21,7 @@ function getDayOfWeek(): number {
   return brazilTime.getUTCDay()
 }
 
-// Check if store is open from settings table (manual control ONLY)
+// Check if store is open from settings table (manual control ONLY - v2)
 async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
   const { data: settings, error } = await supabase
     .from('settings')
