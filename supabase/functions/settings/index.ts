@@ -38,7 +38,8 @@ serve(async (req) => {
           .insert({ 
             auto_print_enabled: false,
             whatsapp_enabled: false,
-            webhook_n8n_url: null
+            webhook_n8n_url: null,
+            is_open: false
           })
           .select()
           .single();
@@ -65,7 +66,7 @@ serve(async (req) => {
       const body = await req.json();
       console.log("Updating settings with:", body);
       
-      const { auto_print_enabled, webhook_n8n_url, whatsapp_enabled } = body;
+      const { auto_print_enabled, webhook_n8n_url, whatsapp_enabled, is_open } = body;
 
       // First get current settings
       const { data: currentSettings } = await supabase
@@ -81,6 +82,7 @@ serve(async (req) => {
       if (auto_print_enabled !== undefined) updateData.auto_print_enabled = auto_print_enabled;
       if (webhook_n8n_url !== undefined) updateData.webhook_n8n_url = webhook_n8n_url;
       if (whatsapp_enabled !== undefined) updateData.whatsapp_enabled = whatsapp_enabled;
+      if (is_open !== undefined) updateData.is_open = is_open;
 
       let data;
       let error;
@@ -102,7 +104,8 @@ serve(async (req) => {
           .insert({
             auto_print_enabled: auto_print_enabled ?? false,
             whatsapp_enabled: whatsapp_enabled ?? false,
-            webhook_n8n_url: webhook_n8n_url ?? null
+            webhook_n8n_url: webhook_n8n_url ?? null,
+            is_open: is_open ?? false
           })
           .select()
           .single();

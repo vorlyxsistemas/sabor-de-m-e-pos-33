@@ -21,29 +21,34 @@ function getDayOfWeek(): number {
   return brazilTime.getUTCDay()
 }
 
-// Business hours: Mon-Sat 07:00-14:00
-function isWithinBusinessHours(): { open: boolean; message?: string } {
-  const dayOfWeek = getDayOfWeek()
-  const currentHour = getCurrentHour()
+// Check if store is open from settings table (manual control)
+async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
+  const { data: settings, error } = await supabase
+    .from('settings')
+    .select('is_open')
+    .limit(1)
+    .maybeSingle()
 
-  // Closed on Sundays
-  if (dayOfWeek === 0) {
-    return { open: false, message: 'Fechado aos domingos' }
+  if (error) {
+    console.error('Error checking store status:', error)
+    // Default to open if can't check settings
+    return { open: true }
   }
 
-  // Open 07:00-14:00
-  if (currentHour < 7) {
-    return { open: false, message: 'Abrimos às 7h' }
-  }
+  // If is_open is null or undefined, default to closed for safety
+  const isOpen = settings?.is_open ?? false
 
-  if (currentHour >= 14) {
-    return { open: false, message: 'Fechado - nosso horário é de 7h às 14h' }
+  if (!isOpen) {
+    return { 
+      open: false, 
+      message: 'A lanchonete está fechada no momento. Entre em contato conosco para mais informações.' 
+    }
   }
 
   return { open: true }
 }
 
-// Category-specific time rules
+// Category-specific time rules (optional warnings, not blocking)
 function isCategoryAvailable(categoryName: string): { available: boolean; message?: string } {
   const currentHour = getCurrentHour()
 
@@ -193,15 +198,15 @@ Deno.serve(async (req) => {
         addressStr = body.address.street
       }
 
-      // RULE 1: Check business hours
+      // RULE 1: Check if store is open (manual control via settings)
       const skipHoursCheck = url.searchParams.get('skip_hours_check') === 'true'
       if (!skipHoursCheck) {
-        const businessHours = isWithinBusinessHours()
-        if (!businessHours.open) {
+        const storeStatus = await isStoreOpen(supabase)
+        if (!storeStatus.open) {
           return new Response(
             JSON.stringify({ 
-              error: 'Fora do horário de funcionamento',
-              message: businessHours.message
+              error: 'Lanchonete fechada',
+              message: storeStatus.message
             }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
