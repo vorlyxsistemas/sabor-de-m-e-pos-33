@@ -10,7 +10,6 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Store, 
-  Clock, 
   MapPin, 
   MessageSquare, 
   Printer,
@@ -353,41 +352,6 @@ const Configuracoes = () => {
           </CardContent>
         </Card>
 
-        {/* Horários */}
-        <Card className="shadow-soft">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              Horários de Funcionamento
-            </CardTitle>
-            <CardDescription>Configure os horários de atendimento</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Segunda a Sexta</span>
-              <div className="flex gap-2">
-                <Input className="w-20" placeholder="07:00" />
-                <span className="self-center">até</span>
-                <Input className="w-20" placeholder="14:00" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Sábado</span>
-              <div className="flex gap-2">
-                <Input className="w-20" placeholder="07:00" />
-                <span className="self-center">até</span>
-                <Input className="w-20" placeholder="14:00" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Domingo</span>
-              <div className="flex gap-2 items-center">
-                <span className="text-sm text-muted-foreground">Fechado</span>
-              </div>
-            </div>
-            <Button>Salvar</Button>
-          </CardContent>
-        </Card>
 
         {/* Taxa de Entrega */}
         <Card className="shadow-soft">
