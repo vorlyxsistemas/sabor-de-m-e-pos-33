@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Check if store is open from settings table (manual control ONLY)
+// Check if store is open from settings table (manual control ONLY - v2)
 async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
   const { data: settings, error } = await supabase
     .from('settings')
