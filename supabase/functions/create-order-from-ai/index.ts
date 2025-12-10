@@ -79,6 +79,8 @@ async function getDeliveryFee(supabase: any, bairro: string): Promise<number> {
 }
 
 Deno.serve(async (req) => {
+  console.log('[create-order-from-ai] Request received:', req.method, req.url)
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
