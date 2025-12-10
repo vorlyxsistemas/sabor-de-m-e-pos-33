@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.whatsapp-enviar]
 verify_jwt = false
+
+[functions.create-order-from-ai]
+verify_jwt = false
