@@ -8,17 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChefHat, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { z } from 'zod';
-
-const loginSchema = z.object({
-  email: z.string().trim().email('Email inválido').max(255),
-  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres').max(100),
-});
-
-const signupSchema = loginSchema.extend({
-  name: z.string().trim().min(2, 'Nome deve ter no mínimo 2 caracteres').max(100),
-  phone: z.string().trim().optional(),
-});
+import { loginSchema, signupSchema } from '@/lib/validation';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -40,8 +30,9 @@ export default function Auth() {
         navigate('/admin', { replace: true });
       } else if (role === 'staff') {
         navigate('/kitchen', { replace: true });
+      } else if (role === 'customer') {
+        navigate('/cliente', { replace: true });
       } else {
-        // Customer role - redirect to home (no customer area)
         navigate('/', { replace: true });
       }
     }
