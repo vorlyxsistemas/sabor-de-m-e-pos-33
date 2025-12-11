@@ -1,5 +1,5 @@
 import { NavLink } from "@/components/NavLink";
-import { Home, UtensilsCrossed, ShoppingCart, LogOut } from "lucide-react";
+import { Home, UtensilsCrossed, ShoppingCart, LogOut, ClipboardList } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Início", url: "/cliente", icon: Home },
   { title: "Cardápio", url: "/cliente/cardapio", icon: UtensilsCrossed },
   { title: "Fazer Pedido", url: "/cliente/pedido", icon: ShoppingCart },
+  { title: "Meus Pedidos", url: "/cliente/meus-pedidos", icon: ClipboardList },
 ];
 
 export function CustomerSidebar() {

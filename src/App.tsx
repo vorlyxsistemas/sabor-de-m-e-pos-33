@@ -32,6 +32,7 @@ import NewOrder from "./pages/NewOrder";
 import CustomerHome from "./pages/customer/CustomerHome";
 import CustomerCardapio from "./pages/customer/CustomerCardapio";
 import CustomerPedido from "./pages/customer/CustomerPedido";
+import CustomerMeusPedidos from "./pages/customer/CustomerMeusPedidos";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/cliente" element={<ProtectedRoute allowedRoles={['customer']}><CustomerHome /></ProtectedRoute>} />
             <Route path="/cliente/cardapio" element={<ProtectedRoute allowedRoles={['customer']}><CustomerCardapio /></ProtectedRoute>} />
             <Route path="/cliente/pedido" element={<ProtectedRoute allowedRoles={['customer']}><CustomerPedido /></ProtectedRoute>} />
+            <Route path="/cliente/meus-pedidos" element={<ProtectedRoute allowedRoles={['customer']}><CustomerMeusPedidos /></ProtectedRoute>} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
