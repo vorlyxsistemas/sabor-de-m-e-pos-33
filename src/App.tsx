@@ -28,6 +28,11 @@ import Kitchen from "./pages/Kitchen";
 import Orders from "./pages/Orders";
 import NewOrder from "./pages/NewOrder";
 
+// Customer Pages
+import CustomerHome from "./pages/customer/CustomerHome";
+import CustomerCardapio from "./pages/customer/CustomerCardapio";
+import CustomerPedido from "./pages/customer/CustomerPedido";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -58,6 +63,11 @@ const App = () => (
             <Route path="/kitchen" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Kitchen /></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><Orders /></ProtectedRoute>} />
             <Route path="/orders/new" element={<ProtectedRoute allowedRoles={['admin', 'staff']}><NewOrder /></ProtectedRoute>} />
+
+            {/* Customer Routes */}
+            <Route path="/cliente" element={<ProtectedRoute allowedRoles={['customer']}><CustomerHome /></ProtectedRoute>} />
+            <Route path="/cliente/cardapio" element={<ProtectedRoute allowedRoles={['customer']}><CustomerCardapio /></ProtectedRoute>} />
+            <Route path="/cliente/pedido" element={<ProtectedRoute allowedRoles={['customer']}><CustomerPedido /></ProtectedRoute>} />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

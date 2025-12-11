@@ -1,8 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { ChefHat, ArrowRight, LogOut, User, AlertCircle } from "lucide-react";
+import { ChefHat, ArrowRight, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -12,7 +11,7 @@ const Index = () => {
     await signOut();
   };
 
-  // Customer logged in - show access denied message
+  // Customer logged in - show customer options
   const isCustomer = user && role === 'customer';
 
   return (
@@ -30,7 +29,7 @@ const Index = () => {
           Sabor de Mãe
         </h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-md mx-auto">
-          Sistema de gestão interno
+          {isCustomer ? "Faça seu pedido online" : "Sistema de gestão interno"}
         </p>
 
         {/* User Status */}
@@ -42,16 +41,6 @@ const Index = () => {
               {role || 'carregando...'}
             </span>
           </div>
-        )}
-
-        {/* Customer Warning */}
-        {isCustomer && (
-          <Alert className="max-w-md mx-auto mb-6 text-left">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Este sistema é de uso interno. Para fazer pedidos, entre em contato pelo WhatsApp.
-            </AlertDescription>
-          </Alert>
         )}
 
         {/* Actions */}
@@ -79,14 +68,23 @@ const Index = () => {
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               )}
-              {isStaff && (
+              {isStaff && !isAdmin && (
                 <Button 
                   size="lg" 
-                  variant={isAdmin ? "outline" : "default"}
                   onClick={() => navigate("/kitchen")}
                   className="gap-2"
                 >
                   Cozinha
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+              {isCustomer && (
+                <Button 
+                  size="lg" 
+                  onClick={() => navigate("/cliente")}
+                  className="gap-2"
+                >
+                  Minha Área
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               )}
