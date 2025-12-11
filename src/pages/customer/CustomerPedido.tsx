@@ -213,42 +213,43 @@ const CustomerPedido = () => {
 
     setSubmitting(true);
     try {
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          customer_name: customerName.trim(),
-          customer_phone: customerPhone?.trim() || null,
-          order_type: orderType,
-          address: orderType === 'entrega' ? address.trim() : null,
-          delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
-          subtotal,
-          total,
-          status: 'pending',
-        })
-        .select()
-        .single();
+      // Use edge function to create order (bypasses RLS)
+      const orderData = {
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone?.trim() || null,
+        order_type: orderType,
+        address: orderType === 'entrega' ? address.trim() : null,
+        bairro: orderType === 'entrega' ? bairro.trim() : null,
+        delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+        subtotal,
+        total,
+        status: 'pending',
+        source: 'web',
+        items: cart.map(item => ({
+          item_id: item.item_id,
+          quantity: item.quantity,
+          extras: item.isLunch 
+            ? {
+                type: "lunch",
+                base: item.lunchBase,
+                meats: item.lunchMeats,
+                extraMeats: item.lunchExtraMeats,
+                sides: item.lunchSides,
+                regularExtras: item.extras
+              }
+            : item.extras,
+          tapioca_molhada: item.tapioca_molhada,
+          price: item.price * item.quantity,
+        })),
+      };
+
+      const { data, error: orderError } = await supabase.functions.invoke('orders', {
+        method: 'POST',
+        body: orderData,
+      });
 
       if (orderError) throw orderError;
-
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        item_id: item.item_id,
-        quantity: item.quantity,
-        extras: item.isLunch 
-          ? {
-              type: "lunch",
-              base: item.lunchBase,
-              meats: item.lunchMeats,
-              extraMeats: item.lunchExtraMeats,
-              sides: item.lunchSides,
-              regularExtras: item.extras
-            }
-          : item.extras,
-        tapioca_molhada: item.tapioca_molhada,
-        price: item.price * item.quantity,
-      }));
-
-      await supabase.from('order_items').insert(orderItems);
+      if (data?.error) throw new Error(data.error);
 
       toast({ title: "Pedido realizado com sucesso!" });
       setCart([]);
