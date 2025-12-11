@@ -176,16 +176,15 @@ serve(async (req) => {
       customer_name: body.customer.name.trim(),
       customer_phone: body.customer.phone.trim(),
       order_type: orderType,
-      payment_method: body.order?.payment_method || null,
       scheduled_for: body.order?.scheduled_for || null,
       address: body.order?.address || null,
-      bairro: body.order?.bairro || null,
+      cep: null,
+      reference: null,
       subtotal,
       extras_fee,
-      delivery_fee,
+      delivery_tax: delivery_fee,
       total,
-      status: 'A_PREPARAR',
-      source: 'whatsapp_ai'
+      status: 'A_PREPARAR'
     };
 
     const { data: order, error: orderError } = await supabase
