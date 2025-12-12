@@ -13,7 +13,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.orders]
-verify_jwt = false
+verify_jwt = true
 
 [functions.ai-session]
 verify_jwt = false
@@ -28,7 +28,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.settings]
-verify_jwt = false
+verify_jwt = true
 
 [functions.whatsapp-recebido]
 verify_jwt = false
