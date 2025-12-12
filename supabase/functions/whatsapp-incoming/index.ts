@@ -1,8 +1,37 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Validation schemas
+const phoneSchema = z.string()
+  .min(8, 'Telefone inválido')
+  .max(20, 'Telefone muito longo')
+  .regex(/^[\d\s\(\)\-\+@a-zA-Z.]+$/, 'Telefone inválido')
+  .transform(val => val.replace('@s.whatsapp.net', '').replace('@c.us', '').trim())
+
+const messageTextSchema = z.string()
+  .max(4096, 'Mensagem muito longa')
+  .default('')
+
+const webhookPayloadSchema = z.object({
+  event: z.string().optional(),
+  type: z.string().optional(),
+  data: z.object({
+    message: z.any().optional()
+  }).optional(),
+  message: z.any().optional(),
+  from: z.string().optional(),
+  phone: z.string().optional(),
+  text: z.string().optional(),
+  messageType: z.string().optional(),
+}).passthrough()
+
+function sanitizeString(input: string): string {
+  return input.trim().replace(/[<>]/g, '').slice(0, 4096)
 }
 
 Deno.serve(async (req) => {
@@ -25,7 +54,18 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const body = await req.json()
+    const rawBody = await req.json()
+    
+    // Validate webhook payload structure
+    const parseResult = webhookPayloadSchema.safeParse(rawBody)
+    if (!parseResult.success) {
+      console.error('Invalid webhook payload:', parseResult.error.errors)
+      return new Response(JSON.stringify({ status: 'error', message: 'Invalid payload format' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+    
+    const body = parseResult.data
     console.log('Incoming WhatsApp webhook:', JSON.stringify(body, null, 2))
 
     // Extract message data from Evolution API payload
@@ -35,23 +75,35 @@ Deno.serve(async (req) => {
     // Handle message events
     if (eventType === 'messages.upsert' || eventType === 'message') {
       const messageData = body.data?.message || body.message || body
-      const from = messageData?.key?.remoteJid || body.from || body.phone
-      const messageText = messageData?.message?.conversation || 
+      const rawFrom = messageData?.key?.remoteJid || body.from || body.phone
+      const rawMessageText = messageData?.message?.conversation || 
                          messageData?.message?.extendedTextMessage?.text ||
                          body.text ||
                          body.message?.text ||
                          ''
       const messageType = messageData?.messageType || body.messageType || 'text'
 
-      if (!from) {
+      if (!rawFrom) {
         console.log('No phone number in payload, skipping')
         return new Response(JSON.stringify({ status: 'skipped', reason: 'no phone' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
 
-      // Clean phone number (remove @s.whatsapp.net if present)
-      const phone = from.replace('@s.whatsapp.net', '').replace('@c.us', '')
+      // Validate and sanitize phone number
+      const phoneResult = phoneSchema.safeParse(rawFrom)
+      if (!phoneResult.success) {
+        console.log('Invalid phone number format:', rawFrom)
+        return new Response(JSON.stringify({ status: 'skipped', reason: 'invalid phone format' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+      const phone = phoneResult.data
+      
+      // Validate and sanitize message text
+      const textResult = messageTextSchema.safeParse(rawMessageText)
+      const messageText = textResult.success ? sanitizeString(textResult.data) : ''
+      
       console.log('Processing message from:', phone)
 
       // Check if client exists
