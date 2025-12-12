@@ -5,6 +5,43 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Helper to verify user role (admin or staff)
+async function verifyRole(supabase: any, userId: string, role: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .rpc('has_role', { _user_id: userId, _role: role });
+  
+  if (error) {
+    console.error(`Error checking ${role} role:`, error);
+    return false;
+  }
+  return data === true;
+}
+
+// Helper to get authenticated user and verify staff/admin role
+async function getAuthenticatedStaffUser(req: Request, supabase: any): Promise<{ user: any; error?: string }> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return { user: null, error: 'Não autorizado' };
+  }
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+  if (authError || !user) {
+    return { user: null, error: 'Token inválido' };
+  }
+
+  // Check if user is admin or staff
+  const isAdmin = await verifyRole(supabase, user.id, 'admin');
+  const isStaff = await verifyRole(supabase, user.id, 'staff');
+
+  if (!isAdmin && !isStaff) {
+    return { user: null, error: 'Acesso negado. Apenas administradores e funcionários.' };
+  }
+
+  return { user };
+}
+
 // Get current hour in Brazil timezone (UTC-3)
 function getCurrentHour(): number {
   const now = new Date()
@@ -121,8 +158,17 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url)
 
-    // GET - Fetch order by ID or list all orders
+    // GET - Fetch order by ID or list all orders (REQUIRES ADMIN/STAFF AUTH)
     if (req.method === 'GET') {
+      // Verify authentication and role
+      const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
+      if (authError) {
+        return new Response(
+          JSON.stringify({ error: authError }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       const orderId = url.searchParams.get('id')
       
       if (!orderId) {
@@ -493,8 +539,17 @@ Deno.serve(async (req) => {
       )
     }
 
-    // PATCH - Update order status
+    // PATCH - Update order status (REQUIRES ADMIN/STAFF AUTH)
     if (req.method === 'PATCH') {
+      // Verify authentication and role
+      const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
+      if (authError) {
+        return new Response(
+          JSON.stringify({ error: authError }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       const orderId = url.searchParams.get('id')
       const body = await req.json()
 
@@ -525,8 +580,17 @@ Deno.serve(async (req) => {
       )
     }
 
-    // DELETE - Cancel order (within 10 min window)
+    // DELETE - Cancel order (REQUIRES ADMIN/STAFF AUTH + within 10 min window)
     if (req.method === 'DELETE') {
+      // Verify authentication and role
+      const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
+      if (authError) {
+        return new Response(
+          JSON.stringify({ error: authError }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       const orderId = url.searchParams.get('id')
 
       if (!orderId) {
