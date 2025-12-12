@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Extra {
+  id: string;
   name: string;
   price: number;
+  code?: string;
 }
 
 interface ItemCardProps {
@@ -20,32 +23,57 @@ interface ItemCardProps {
     allow_tapioca_molhada?: boolean;
     is_molhado_by_default?: boolean;
     allow_extras?: boolean;
+    category_id?: string;
   };
+  categoryName?: string;
   onAddToCart: (item: any, extras: Extra[], tapiocaMolhada: boolean) => void;
 }
 
-// Available extras for lanches (cuscuz, tapiocas, pães, etc.)
-const AVAILABLE_EXTRAS: Extra[] = [
-  { name: "Carne moída", price: 4 },
-  { name: "Ovo", price: 2 },
-  { name: "Queijo", price: 3 },
-];
+// Categories that should NOT show extras
+const CATEGORIES_WITHOUT_EXTRAS = ["bebidas", "porções", "porcoes", "sucos", "refrigerantes"];
 
-export function ItemCard({ item, onAddToCart }: ItemCardProps) {
+export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps) {
   const [selectedExtras, setSelectedExtras] = useState<Extra[]>([]);
   const [tapiocaMolhada, setTapiocaMolhada] = useState(false);
+  const [availableExtras, setAvailableExtras] = useState<Extra[]>([]);
 
   const isTapioca = item.name.toLowerCase().includes("tapioca");
-  const isCuscuz = item.name.toLowerCase().includes("cuscuz");
   const canBeMolhada = isTapioca && !item.is_molhado_by_default;
-  // Always show extras for all lanches (tapiocas, cuscuz, pães, sanduíches, etc.)
-  const canHaveExtras = true;
+  
+  // Check if this category should show extras
+  const categoryLower = categoryName.toLowerCase();
+  const isExcludedCategory = CATEGORIES_WITHOUT_EXTRAS.some(cat => categoryLower.includes(cat));
+  const canHaveExtras = item.allow_extras !== false && !isExcludedCategory;
+
+  // Fetch available extras for this item's category
+  useEffect(() => {
+    if (canHaveExtras) {
+      fetchExtras();
+    }
+  }, [categoryName, canHaveExtras]);
+
+  const fetchExtras = async () => {
+    const { data } = await supabase
+      .from("global_extras")
+      .select("*")
+      .or(`applies_to_category.is.null,applies_to_category.eq.${categoryName}`)
+      .order("name");
+    
+    if (data) {
+      setAvailableExtras(data.map(e => ({
+        id: e.id,
+        name: e.name,
+        price: Number(e.price),
+        code: e.code
+      })));
+    }
+  };
 
   const handleExtraToggle = (extra: Extra) => {
     setSelectedExtras(prev => {
-      const exists = prev.find(e => e.name === extra.name);
+      const exists = prev.find(e => e.id === extra.id);
       if (exists) {
-        return prev.filter(e => e.name !== extra.name);
+        return prev.filter(e => e.id !== extra.id);
       }
       return [...prev, extra];
     });
@@ -89,20 +117,20 @@ export function ItemCard({ item, onAddToCart }: ItemCardProps) {
           </div>
         )}
 
-        {/* Extra Fillings */}
-        {canHaveExtras && (
+        {/* Extra Fillings - Only show if category allows */}
+        {canHaveExtras && availableExtras.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Recheios extras:</p>
             <div className="grid grid-cols-1 gap-1">
-              {AVAILABLE_EXTRAS.map((extra) => (
-                <div key={extra.name} className="flex items-center space-x-2">
+              {availableExtras.map((extra) => (
+                <div key={extra.id} className="flex items-center space-x-2">
                   <Checkbox
-                    id={`extra-${item.id}-${extra.name}`}
-                    checked={selectedExtras.some(e => e.name === extra.name)}
+                    id={`extra-${item.id}-${extra.id}`}
+                    checked={selectedExtras.some(e => e.id === extra.id)}
                     onCheckedChange={() => handleExtraToggle(extra)}
                   />
                   <Label 
-                    htmlFor={`extra-${item.id}-${extra.name}`} 
+                    htmlFor={`extra-${item.id}-${extra.id}`} 
                     className="text-xs cursor-pointer flex-1"
                   >
                     {extra.name}

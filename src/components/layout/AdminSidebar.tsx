@@ -33,6 +33,7 @@ const menuItems = [
   { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
   { title: 'Categorias', url: '/admin/categories', icon: Tags },
   { title: 'Itens', url: '/admin/items', icon: UtensilsCrossed },
+  { title: 'Extras', url: '/admin/extras', icon: Tags },
   { title: 'Almoço', url: '/admin/lunch', icon: Salad },
   { title: 'Taxas de Entrega', url: '/admin/delivery-zones', icon: MapPin },
   { title: 'Usuários', url: '/admin/users', icon: Users },

@@ -316,7 +316,8 @@ const CustomerPedido = () => {
                 {items.map(item => (
                   <ItemCard 
                     key={item.id} 
-                    item={item} 
+                    item={item}
+                    categoryName={selectedCategoryName}
                     onAddToCart={addToCart}
                   />
                 ))}
