@@ -1,8 +1,57 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Validation schemas
+const uuidSchema = z.string().uuid('ID inválido')
+
+const extraSchema = z.object({
+  code: z.string().max(50).optional(),
+  id: z.string().max(50).optional(),
+  name: z.string().max(100).optional(),
+  price: z.number().min(0).max(9999.99).optional(),
+}).refine(data => data.code || data.id || data.name, {
+  message: 'Extra deve ter code, id ou name',
+})
+
+const orderItemInputSchema = z.object({
+  item_id: uuidSchema,
+  quantity: z.number().int().min(1).max(50),
+  price: z.number().min(0).max(9999.99).optional(),
+  tapioca_molhada: z.boolean().optional().default(false),
+  extras: z.array(extraSchema).optional().default([]),
+})
+
+const addressObjectSchema = z.object({
+  street: z.string().trim().max(200).optional(),
+  bairro: z.string().trim().max(100).optional(),
+  cep: z.string().trim().max(10).optional(),
+  reference: z.string().trim().max(200).optional(),
+})
+
+const createOrderBodySchema = z.object({
+  customer_name: z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres').max(100, 'Nome muito longo'),
+  customer_phone: z.string().trim().max(20).regex(/^[\d\s\(\)\-\+]*$/, 'Telefone inválido').optional().or(z.literal('')),
+  order_type: z.enum(['local', 'retirada', 'entrega']),
+  address: z.union([z.string().max(200), addressObjectSchema]).optional(),
+  bairro: z.string().trim().max(100).optional(),
+  cep: z.string().trim().max(10).optional(),
+  reference: z.string().trim().max(200).optional(),
+  scheduled_for: z.string().max(30).optional(),
+  items: z.array(orderItemInputSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
+  payment_method: z.string().max(50).optional(),
+})
+
+const updateOrderStatusSchema = z.object({
+  status: z.enum(['pending', 'A_PREPARAR', 'PREPARANDO', 'PRONTO', 'ENTREGUE', 'cancelled']),
+})
+
+function sanitizeString(input: string): string {
+  return input.trim().replace(/[<>]/g, '').slice(0, 1000)
 }
 
 // Helper to verify user role (admin or staff)
@@ -226,9 +275,23 @@ Deno.serve(async (req) => {
 
     // POST - Create new order with business rules
     if (req.method === 'POST') {
-      const body: CreateOrderBody = await req.json()
+      const rawBody = await req.json()
       
-      console.log('Creating new order:', JSON.stringify(body))
+      console.log('Creating new order - raw:', JSON.stringify(rawBody))
+      
+      // Validate with Zod schema
+      const parseResult = createOrderBodySchema.safeParse(rawBody)
+      if (!parseResult.success) {
+        const errors = parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
+        console.error('Order validation error:', errors)
+        return new Response(
+          JSON.stringify({ error: `Dados inválidos: ${errors}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      const body = parseResult.data
+      console.log('Creating new order - validated:', JSON.stringify(body))
 
       // Normalize address: support both flat fields (Sofia) and nested object (original)
       // Extract bairro from flat field or nested address
@@ -551,20 +614,32 @@ Deno.serve(async (req) => {
       }
 
       const orderId = url.searchParams.get('id')
-      const body = await req.json()
+      const rawBody = await req.json()
 
-      if (!orderId) {
+      // Validate orderId
+      const orderIdResult = uuidSchema.safeParse(orderId)
+      if (!orderIdResult.success) {
         return new Response(
-          JSON.stringify({ error: 'ID do pedido é obrigatório' }),
+          JSON.stringify({ error: 'ID do pedido inválido' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      console.log('Updating order:', orderId, body)
+      // Validate status update body
+      const bodyResult = updateOrderStatusSchema.safeParse(rawBody)
+      if (!bodyResult.success) {
+        const errors = bodyResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
+        return new Response(
+          JSON.stringify({ error: `Dados inválidos: ${errors}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      console.log('Updating order:', orderId, bodyResult.data)
 
       const { data, error } = await supabase
         .from('orders')
-        .update(body)
+        .update(bodyResult.data)
         .eq('id', orderId)
         .select()
         .single()
@@ -593,9 +668,11 @@ Deno.serve(async (req) => {
 
       const orderId = url.searchParams.get('id')
 
-      if (!orderId) {
+      // Validate orderId
+      const orderIdResult = uuidSchema.safeParse(orderId)
+      if (!orderIdResult.success) {
         return new Response(
-          JSON.stringify({ error: 'ID do pedido é obrigatório' }),
+          JSON.stringify({ error: 'ID do pedido inválido' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }

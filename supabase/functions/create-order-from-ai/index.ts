@@ -1,39 +1,48 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface Extra {
-  name: string;
-  price: number;
-}
+// Validation schemas
+const extraSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  price: z.number().min(0).max(9999.99),
+});
 
-interface OrderItemInput {
-  item_id: string;
-  quantity: number;
-  price: number;
-  tapioca_molhada?: boolean;
-  extras?: Extra[];
-}
+const orderItemSchema = z.object({
+  item_id: z.string().uuid('ID do item inválido'),
+  quantity: z.number().int().min(1, 'Quantidade mínima é 1').max(50, 'Quantidade máxima é 50'),
+  price: z.number().min(0).max(9999.99),
+  tapioca_molhada: z.boolean().optional().default(false),
+  extras: z.array(extraSchema).optional().default([]),
+});
 
-interface CreateOrderFromAIInput {
-  customer: {
-    name: string;
-    phone: string;
-  };
-  order: {
-    order_type: 'local' | 'delivery' | 'pickup';
-    payment_method?: string;
-    scheduled_for?: string | null;
-    address?: string;
-    bairro?: string;
-  };
-  items: OrderItemInput[];
-}
+const customerSchema = z.object({
+  name: z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres').max(100, 'Nome muito longo'),
+  phone: z.string().trim().min(8, 'Telefone inválido').max(20, 'Telefone muito longo')
+    .regex(/^[\d\s\(\)\-\+]*$/, 'Telefone inválido'),
+});
+
+const orderDetailsSchema = z.object({
+  order_type: z.enum(['local', 'delivery', 'pickup']),
+  payment_method: z.string().max(50).optional(),
+  scheduled_for: z.string().nullable().optional(),
+  address: z.string().trim().max(200).optional(),
+  bairro: z.string().trim().max(100).optional(),
+});
+
+const createOrderFromAISchema = z.object({
+  customer: customerSchema,
+  order: orderDetailsSchema,
+  items: z.array(orderItemSchema).min(1, 'Pedido deve ter pelo menos um item').max(30, 'Máximo de 30 itens'),
+});
+
+type CreateOrderFromAIInput = z.infer<typeof createOrderFromAISchema>;
 
 async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
   const { data: settings, error } = await supabase
@@ -95,30 +104,22 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const body: CreateOrderFromAIInput = await req.json();
-    console.log('[create-order-from-ai] Body:', JSON.stringify(body, null, 2));
+    const rawBody = await req.json();
+    console.log('[create-order-from-ai] Raw body:', JSON.stringify(rawBody, null, 2));
 
-    // Validation
-    if (!body.customer?.name?.trim()) {
+    // Validate with Zod schema
+    const parseResult = createOrderFromAISchema.safeParse(rawBody);
+    if (!parseResult.success) {
+      const errors = parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ');
+      console.error('[create-order-from-ai] Validation error:', errors);
       return new Response(
-        JSON.stringify({ success: false, error: 'customer.name é obrigatório' }),
+        JSON.stringify({ success: false, error: `Dados inválidos: ${errors}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!body.customer?.phone?.trim()) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'customer.phone é obrigatório' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'items não pode estar vazio' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const body = parseResult.data;
+    console.log('[create-order-from-ai] Validated body:', JSON.stringify(body, null, 2));
 
     // Check store status
     const storeStatus = await isStoreOpen(supabase);
@@ -129,19 +130,12 @@ serve(async (req) => {
       );
     }
 
-    // Calculate totals
+    // Calculate totals (items already validated by Zod)
     let subtotal = 0;
     let extras_fee = 0;
 
     for (const item of body.items) {
-      if (!item.item_id || !item.quantity || item.quantity < 1) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Cada item deve ter item_id e quantity >= 1' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      subtotal += (item.price || 0) * item.quantity;
+      subtotal += item.price * item.quantity;
 
       if (item.tapioca_molhada) {
         extras_fee += 1.00 * item.quantity;
