@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/admin/Dashboard";
 import Categories from "./pages/admin/Categories";
 import Items from "./pages/admin/Items";
+import Extras from "./pages/admin/Extras";
 import Lunch from "./pages/admin/Lunch";
 import Almoco from "./pages/admin/Almoco";
 import DeliveryZones from "./pages/admin/DeliveryZones";
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Dashboard /></ProtectedRoute>} />
             <Route path="/admin/categories" element={<ProtectedRoute allowedRoles={['admin']}><Categories /></ProtectedRoute>} />
             <Route path="/admin/items" element={<ProtectedRoute allowedRoles={['admin']}><Items /></ProtectedRoute>} />
+            <Route path="/admin/extras" element={<ProtectedRoute allowedRoles={['admin']}><Extras /></ProtectedRoute>} />
             <Route path="/admin/lunch" element={<ProtectedRoute allowedRoles={['admin']}><Lunch /></ProtectedRoute>} />
             <Route path="/admin/almoco" element={<ProtectedRoute allowedRoles={['admin']}><Almoco /></ProtectedRoute>} />
             <Route path="/admin/delivery-zones" element={<ProtectedRoute allowedRoles={['admin']}><DeliveryZones /></ProtectedRoute>} />

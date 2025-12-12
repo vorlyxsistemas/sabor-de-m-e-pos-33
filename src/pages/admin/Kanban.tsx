@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Archive, ArchiveX } from "lucide-react";
 import { KanbanCard } from "@/components/kitchen/KanbanCard";
 import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
 import { PrintReceipt } from "@/components/kitchen/PrintReceipt";
 import { printReceipt } from "@/lib/printReceipt";
+import { Card, CardContent } from "@/components/ui/card";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 type OrderStatus = "pending" | "preparing" | "ready" | "delivered" | "cancelled";
 
@@ -34,6 +39,7 @@ interface Order {
   total: number;
   created_at: string;
   scheduled_for: string | null;
+  archived: boolean;
   order_items: OrderItem[];
 }
 
@@ -55,11 +61,13 @@ function getNextStatus(current: OrderStatus): OrderStatus | null {
 const Kanban = () => {
   const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [archivedOrders, setArchivedOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
+  const [activeTab, setActiveTab] = useState("kanban");
   const printedOrdersRef = useRef<Set<string>>(new Set());
 
   const fetchSettings = useCallback(async () => {
@@ -102,7 +110,16 @@ const Kanban = () => {
         .order("created_at");
 
       if (error) throw error;
-      setOrders((data as Order[]) || []);
+      
+      // Check if archived column exists by checking for it in data
+      const allOrders = ((data || []) as any[]).map(o => ({
+        ...o,
+        archived: o.archived ?? false
+      })) as Order[];
+      
+      // Filter active vs archived
+      setOrders(allOrders.filter(o => !o.archived));
+      setArchivedOrders(allOrders.filter(o => o.archived));
     } catch (error) {
       console.error("Erro ao buscar pedidos:", error);
       toast({
@@ -172,8 +189,8 @@ const Kanban = () => {
             .eq("id", payload.new.id)
             .single();
           
-          if (newOrder && newOrder.status === "pending") {
-            autoPrintPendingOrders([newOrder as Order], shouldPrint);
+          if (newOrder && (newOrder as any).status === "pending") {
+            autoPrintPendingOrders([{ ...newOrder, archived: false } as Order], shouldPrint);
           }
           fetchOrders();
         }
@@ -225,6 +242,50 @@ const Kanban = () => {
     }
   };
 
+  const archiveOrder = async (orderId: string) => {
+    try {
+      // Note: archived column added via migration
+      const { error } = await supabase
+        .from("orders")
+        .update({ archived: true } as any)
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      toast({ title: "Pedido arquivado!" });
+      fetchOrders();
+    } catch (error: any) {
+      console.error("Erro ao arquivar:", error);
+      toast({
+        title: "Erro ao arquivar",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const unarchiveOrder = async (orderId: string) => {
+    try {
+      // Note: archived column added via migration
+      const { error } = await supabase
+        .from("orders")
+        .update({ archived: false } as any)
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      toast({ title: "Pedido restaurado!" });
+      fetchOrders();
+    } catch (error: any) {
+      console.error("Erro ao restaurar:", error);
+      toast({
+        title: "Erro ao restaurar",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
     setShowDetails(true);
@@ -251,36 +312,118 @@ const Kanban = () => {
 
   return (
     <AdminLayout title="Cozinha" subtitle="Kanban de pedidos em tempo real">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {columns.map((col) => {
-          const columnOrders = orders.filter((o) => o.status === col.status);
-          return (
-            <div key={col.status} className="flex flex-col min-w-0 relative z-0">
-              <div className="flex items-center gap-2 sticky top-0 bg-background py-2 z-10">
-                <div className={`w-3 h-3 rounded-full ${col.color}`} />
-                <h3 className="font-semibold">{col.title}</h3>
-                <Badge variant="outline">{columnOrders.length}</Badge>
-              </div>
-              <div className="flex flex-col gap-2 min-h-[200px] bg-muted/30 rounded-lg p-2 overflow-x-hidden overflow-y-auto">
-                {columnOrders.map((order) => (
-                  <KanbanCard
-                    key={order.id}
-                    order={order}
-                    onAdvance={() => moveOrder(order.id, order.status)}
-                    onViewDetails={() => handleViewDetails(order)}
-                    canAdvance={col.status !== "delivered"}
-                  />
-                ))}
-                {columnOrders.length === 0 && (
-                  <div className="text-center text-muted-foreground text-sm py-8">
-                    Nenhum pedido
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="kanban" className="gap-2">
+            Kanban
+            <Badge variant="secondary">{orders.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="archived" className="gap-2">
+            <Archive className="h-4 w-4" />
+            Arquivados
+            <Badge variant="outline">{archivedOrders.length}</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="kanban">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {columns.map((col) => {
+              const columnOrders = orders.filter((o) => o.status === col.status);
+              return (
+                <div key={col.status} className="flex flex-col min-w-0 relative z-0">
+                  <div className="flex items-center gap-2 sticky top-0 bg-background py-2 z-10">
+                    <div className={`w-3 h-3 rounded-full ${col.color}`} />
+                    <h3 className="font-semibold">{col.title}</h3>
+                    <Badge variant="outline">{columnOrders.length}</Badge>
                   </div>
-                )}
+                  <div className="flex flex-col gap-2 min-h-[200px] bg-muted/30 rounded-lg p-2 overflow-x-hidden overflow-y-auto">
+                    {columnOrders.map((order) => (
+                      <div key={order.id} className="space-y-2">
+                        <KanbanCard
+                          order={order}
+                          onAdvance={() => moveOrder(order.id, order.status)}
+                          onViewDetails={() => handleViewDetails(order)}
+                          canAdvance={col.status !== "delivered"}
+                        />
+                        {/* Archive button for delivered orders */}
+                        {col.status === "delivered" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full text-xs gap-1"
+                            onClick={() => archiveOrder(order.id)}
+                          >
+                            <Archive className="h-3 w-3" />
+                            Arquivar
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                    {columnOrders.length === 0 && (
+                      <div className="text-center text-muted-foreground text-sm py-8">
+                        Nenhum pedido
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="archived">
+          <div className="space-y-4">
+            {archivedOrders.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Archive className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nenhum pedido arquivado hoje</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {archivedOrders.map((order) => (
+                  <Card key={order.id} className="opacity-75">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold">
+                          #{order.id.slice(-6).toUpperCase()}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {format(new Date(order.created_at), "HH:mm", { locale: ptBR })}
+                        </span>
+                      </div>
+                      <p className="text-sm">{order.customer_name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {order.order_items?.length || 0} itens • R$ {Number(order.total).toFixed(2)}
+                      </p>
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={() => handleViewDetails(order)}
+                        >
+                          Detalhes
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs gap-1"
+                          onClick={() => unarchiveOrder(order.id)}
+                        >
+                          <ArchiveX className="h-3 w-3" />
+                          Restaurar
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <OrderDetailsModal
         order={selectedOrder}
