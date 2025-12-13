@@ -529,7 +529,8 @@ Deno.serve(async (req) => {
           customer_name: body.customer_name,
           customer_phone: body.customer_phone || null,
           order_type: body.order_type || 'local',
-          address: addressData ? JSON.stringify(addressData) : null,
+          address: addressStr || null,
+          bairro: bairro || null,
           cep: cep || null,
           reference: reference || null,
           scheduled_for: body.scheduled_for || null,
@@ -538,7 +539,6 @@ Deno.serve(async (req) => {
           subtotal: subtotal,
           total: total,
           status: 'pending'
-          // Note: payment_method not saved yet - column doesn't exist in DB
         })
         .select()
         .single()
