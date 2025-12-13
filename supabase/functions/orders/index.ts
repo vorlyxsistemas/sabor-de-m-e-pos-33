@@ -44,6 +44,7 @@ const createOrderBodySchema = z.object({
   scheduled_for: z.string().max(30).optional(),
   items: z.array(orderItemInputSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
   payment_method: z.string().max(50).optional(),
+  user_id: z.string().uuid().nullable().optional(), // Link to authenticated user
 })
 
 const updateOrderStatusSchema = z.object({
@@ -538,7 +539,8 @@ Deno.serve(async (req) => {
           extras_fee: extrasTotal,
           subtotal: subtotal,
           total: total,
-          status: 'pending'
+          status: 'pending',
+          user_id: body.user_id || null // Link order to authenticated user for customer visibility
         })
         .select()
         .single()
