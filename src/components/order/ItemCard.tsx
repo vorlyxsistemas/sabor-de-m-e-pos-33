@@ -24,6 +24,7 @@ interface ItemCardProps {
     is_molhado_by_default?: boolean;
     allow_extras?: boolean;
     category_id?: string;
+    image_url?: string | null;
   };
   categoryName?: string;
   onAddToCart: (item: any, extras: Extra[], tapiocaMolhada: boolean) => void;
@@ -91,7 +92,16 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
   const totalPrice = Number(item.price) + extrasTotal + molhadaPrice;
 
   return (
-    <Card className="shadow-sm">
+    <Card className="shadow-sm overflow-hidden">
+      {item.image_url && (
+        <div className="w-full h-24 bg-muted">
+          <img 
+            src={item.image_url} 
+            alt={item.name}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
       <CardHeader className="py-3 px-4">
         <CardTitle className="text-sm flex justify-between">
           <span>{item.name}</span>

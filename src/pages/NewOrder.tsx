@@ -75,7 +75,7 @@ const NewOrder = () => {
   const fetchItems = async () => {
     const { data } = await supabase
       .from('items')
-      .select('*, extras(*)')
+      .select('id, name, price, description, available, allow_extras, allow_tapioca_molhada, is_molhado_by_default, image_url, extras(*)')
       .eq('category_id', selectedCategory)
       .eq('available', true);
     setItems(data || []);
