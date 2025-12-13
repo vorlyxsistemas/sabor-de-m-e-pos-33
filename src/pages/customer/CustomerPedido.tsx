@@ -225,6 +225,7 @@ const CustomerPedido = () => {
         total,
         status: 'pending',
         source: 'web',
+        user_id: user?.id || null, // Link order to authenticated user
         items: cart.map(item => ({
           item_id: item.item_id,
           quantity: item.quantity,

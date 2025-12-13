@@ -5,12 +5,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Validate that request comes from service role or has valid internal signature
+const validateServiceAccess = (req: Request): boolean => {
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader) return false
+  
+  // Check if it's service role key (used by edge functions)
+  const token = authHeader.replace('Bearer ', '')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  
+  // Service role key check - edge functions use this
+  if (token === serviceRoleKey) return true
+  
+  // Check for internal service header (used by n8n/webhooks)
+  const internalKey = req.headers.get('x-internal-service-key')
+  const expectedKey = Deno.env.get('INTERNAL_SERVICE_KEY')
+  if (expectedKey && internalKey === expectedKey) return true
+  
+  return false
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    // Validate service access - only service role or internal services can access
+    if (!validateServiceAccess(req)) {
+      console.warn('Unauthorized access attempt to log-message')
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - service access required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
