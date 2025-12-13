@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Loader2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, X, Upload, Image as ImageIcon } from "lucide-react";
 
 interface Category {
   id: string;
@@ -54,6 +54,7 @@ interface Item {
   allow_quantity: boolean;
   allow_tapioca_molhada: boolean;
   available: boolean;
+  image_url: string | null;
   extras?: Extra[];
 }
 
@@ -66,20 +67,24 @@ const defaultItem: Omit<Item, 'id'> = {
   allow_quantity: true,
   allow_tapioca_molhada: false,
   available: true,
+  image_url: null,
   extras: [],
 };
 
 const Items = () => {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(defaultItem);
   const [newExtra, setNewExtra] = useState({ name: '', price: 0 });
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -112,7 +117,7 @@ const Items = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      setItems(data || []);
+      setItems((data as any) || []);
     } catch (error) {
       console.error('Error fetching items:', error);
     } finally {
@@ -123,6 +128,7 @@ const Items = () => {
   const openCreateDialog = () => {
     setEditingItem(null);
     setFormData({ ...defaultItem, category_id: selectedCategory !== 'all' ? selectedCategory : null });
+    setPreviewUrl(null);
     setDialogOpen(true);
   };
 
@@ -137,9 +143,59 @@ const Items = () => {
       allow_quantity: item.allow_quantity,
       allow_tapioca_molhada: item.allow_tapioca_molhada,
       available: item.available,
+      image_url: item.image_url,
       extras: item.extras || [],
     });
+    setPreviewUrl(item.image_url);
     setDialogOpen(true);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({ title: "Arquivo deve ser uma imagem", variant: "destructive" });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Imagem deve ter no máximo 5MB", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `items/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      setFormData({ ...formData, image_url: publicUrl });
+      setPreviewUrl(publicUrl);
+      toast({ title: "Imagem enviada!" });
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      toast({ title: "Erro ao enviar imagem", description: error.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = () => {
+    setFormData({ ...formData, image_url: null });
+    setPreviewUrl(null);
   };
 
   const handleSave = async () => {
@@ -159,6 +215,7 @@ const Items = () => {
         allow_quantity: formData.allow_quantity,
         allow_tapioca_molhada: formData.allow_tapioca_molhada,
         available: formData.available,
+        image_url: formData.image_url,
       };
 
       let itemId: string;
@@ -166,7 +223,7 @@ const Items = () => {
       if (editingItem) {
         const { error } = await supabase
           .from('items')
-          .update(itemData)
+          .update(itemData as any)
           .eq('id', editingItem.id);
         if (error) throw error;
         itemId = editingItem.id;
@@ -176,7 +233,7 @@ const Items = () => {
       } else {
         const { data, error } = await supabase
           .from('items')
-          .insert(itemData)
+          .insert(itemData as any)
           .select()
           .single();
         if (error) throw error;
@@ -282,6 +339,7 @@ const Items = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Imagem</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead className="text-right">Preço</TableHead>
@@ -292,13 +350,26 @@ const Items = () => {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     Nenhum item encontrado
                   </TableCell>
                 </TableRow>
               ) : (
                 items.map((item) => (
                   <TableRow key={item.id}>
+                    <TableCell>
+                      {item.image_url ? (
+                        <img 
+                          src={item.image_url} 
+                          alt={item.name}
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                          <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div>
                         <p className="font-medium">{item.name}</p>
@@ -348,6 +419,61 @@ const Items = () => {
             <DialogTitle>{editingItem ? "Editar Item" : "Novo Item"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Image Upload */}
+            <div className="space-y-2">
+              <Label>Imagem do Produto</Label>
+              <div className="flex items-center gap-4">
+                {previewUrl ? (
+                  <div className="relative">
+                    <img 
+                      src={previewUrl} 
+                      alt="Preview" 
+                      className="w-24 h-24 object-cover rounded-lg border"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={removeImage}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="w-24 h-24 bg-muted rounded-lg border-2 border-dashed flex items-center justify-center">
+                    <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                )}
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="gap-2"
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    {uploading ? "Enviando..." : "Enviar Imagem"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PNG, JPG ou WebP. Máx 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-2">
                 <Label>Nome</Label>
