@@ -294,25 +294,56 @@ Deno.serve(async (req) => {
       const body = parseResult.data
       console.log('Creating new order - validated:', JSON.stringify(body))
 
+      // Try to get user_id from body OR from auth token
+      let userId: string | null = body.user_id || null
+      
+      // If user_id not in body, try to extract from auth header
+      if (!userId) {
+        const authHeader = req.headers.get('Authorization')
+        if (authHeader) {
+          try {
+            const token = authHeader.replace('Bearer ', '')
+            const { data: { user } } = await supabase.auth.getUser(token)
+            if (user) {
+              userId = user.id
+              console.log('Extracted user_id from auth token:', userId)
+            }
+          } catch (e) {
+            console.log('Could not extract user from token:', e)
+          }
+        }
+      }
+      
+      console.log('Final user_id for order:', userId)
+
       // Normalize address: support both flat fields (Sofia) and nested object (original)
-      // Extract bairro from flat field or nested address
+      // Extract bairro from flat field or nested address object
       let bairro: string | undefined
       let cep: string | undefined
       let reference: string | undefined
       let addressStr: string | undefined
 
+      // Priority: flat bairro field > nested address.bairro
       if (body.bairro) {
-        // Sofia AI format: flat fields
+        // Flat fields (Sofia AI or CustomerPedido format)
         bairro = body.bairro
         cep = body.cep
         reference = body.reference
-        addressStr = typeof body.address === 'string' ? body.address : undefined
+        // Get street from nested object if address is object, otherwise from string
+        if (body.address && typeof body.address === 'object') {
+          addressStr = body.address.street
+        } else if (typeof body.address === 'string') {
+          addressStr = body.address
+        }
       } else if (body.address && typeof body.address === 'object') {
-        // Original format: nested object
+        // Only nested object (original format without flat fields)
         bairro = body.address.bairro
         cep = body.address.cep
         reference = body.address.reference
         addressStr = body.address.street
+      } else if (typeof body.address === 'string') {
+        // Just a string address, no bairro (legacy fallback)
+        addressStr = body.address
       }
 
       // RULE 1: Check if store is open (manual control via settings)
@@ -540,7 +571,7 @@ Deno.serve(async (req) => {
           subtotal: subtotal,
           total: total,
           status: 'pending',
-          user_id: body.user_id || null // Link order to authenticated user for customer visibility
+          user_id: userId // Link order to authenticated user for customer visibility
         })
         .select()
         .single()
@@ -550,7 +581,7 @@ Deno.serve(async (req) => {
         throw orderError
       }
 
-      console.log('Order created:', order.id)
+      console.log('Order created:', order.id, 'with user_id:', userId)
 
       // Create order items
       const orderItems = orderItemsData.map((item) => ({
