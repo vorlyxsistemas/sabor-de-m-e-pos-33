@@ -42,12 +42,10 @@ const CustomerMeusPedidos = () => {
   const fetchOrders = async () => {
     if (!user) return;
     
-    // Query orders filtered by user_id - RLS will also enforce this on server-side
-    // Using rpc or manual filter since user_id column may not be in generated types yet
+    // Rely on RLS to only return orders of the authenticated customer
     const { data, error } = await supabase
       .from('orders')
       .select('id, customer_name, order_type, status, subtotal, delivery_tax, total, address, created_at, order_items(id, quantity, price, extras, items(name))')
-      .filter('user_id', 'eq', user.id) // Filter by authenticated user's ID
       .order('created_at', { ascending: false })
       .limit(20);
 
