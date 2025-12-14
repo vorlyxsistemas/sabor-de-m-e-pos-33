@@ -214,13 +214,21 @@ const CustomerPedido = () => {
     setSubmitting(true);
     try {
       // Use edge function to create order (bypasses RLS)
+      const isDelivery = orderType === 'entrega';
+      const trimmedBairro = bairro.trim();
+      const trimmedAddress = address.trim();
+
       const orderData = {
         customer_name: customerName.trim(),
         customer_phone: customerPhone?.trim() || null,
         order_type: orderType,
-        address: orderType === 'entrega' ? address.trim() : null,
-        bairro: orderType === 'entrega' ? bairro.trim() : null,
-        delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+        // Send both nested address object and flat bairro field to be compatible
+        // with all versions of the orders edge function
+        address: isDelivery && trimmedAddress
+          ? { street: trimmedAddress, bairro: trimmedBairro || undefined }
+          : null,
+        bairro: isDelivery ? trimmedBairro || null : null,
+        delivery_tax: isDelivery ? deliveryTax : 0,
         subtotal,
         total,
         status: 'pending',
