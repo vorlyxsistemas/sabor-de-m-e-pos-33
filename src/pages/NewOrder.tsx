@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, Banknote, CreditCard, QrCode } from "lucide-react";
@@ -55,7 +56,9 @@ const NewOrder = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [address, setAddress] = useState('');
   const [bairro, setBairro] = useState('');
+  const [reference, setReference] = useState('');
   const [deliveryTax, setDeliveryTax] = useState(0);
+  const [deliveryZones, setDeliveryZones] = useState<{ id: string; bairro: string; taxa: number }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
   const [troco, setTroco] = useState('');
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,7 @@ const NewOrder = () => {
 
   useEffect(() => {
     fetchCategories();
+    fetchDeliveryZones();
   }, []);
 
   useEffect(() => {
@@ -73,6 +77,20 @@ const NewOrder = () => {
     const { data } = await supabase.from('categories').select('*').order('name');
     setCategories(data || []);
     setLoading(false);
+  };
+
+  const fetchDeliveryZones = async () => {
+    const { data } = await supabase
+      .from('delivery_zones')
+      .select('id, bairro, taxa')
+      .order('bairro');
+    setDeliveryZones(data || []);
+  };
+
+  const handleBairroChange = (selectedBairro: string) => {
+    setBairro(selectedBairro);
+    const zone = deliveryZones.find(z => z.bairro === selectedBairro);
+    setDeliveryTax(zone?.taxa || 0);
   };
 
   const fetchItems = async () => {
@@ -161,15 +179,6 @@ const NewOrder = () => {
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = subtotal + (orderType === 'entrega' ? deliveryTax : 0);
 
-  const fetchDeliveryTax = async () => {
-    if (!bairro.trim()) return;
-    const { data } = await supabase
-      .from('delivery_zones')
-      .select('taxa')
-      .ilike('bairro', `%${bairro}%`)
-      .maybeSingle();
-    setDeliveryTax(data?.taxa || 0);
-  };
 
   const handleSubmit = async () => {
     if (!customerName.trim()) {
@@ -190,6 +199,8 @@ const NewOrder = () => {
           customer_phone: customerPhone || null,
           order_type: orderType,
           address: orderType === 'entrega' ? address : null,
+          bairro: orderType === 'entrega' ? bairro : null,
+          reference: orderType === 'entrega' ? reference : null,
           delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
           subtotal,
           total,
@@ -409,15 +420,27 @@ const NewOrder = () => {
               {orderType === 'entrega' && (
                 <>
                   <div>
-                    <Label className="text-xs">Bairro</Label>
-                    <div className="flex gap-2">
-                      <Input value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro" />
-                      <Button variant="outline" size="sm" onClick={fetchDeliveryTax}>Buscar</Button>
-                    </div>
+                    <Label className="text-xs">Bairro *</Label>
+                    <Select value={bairro} onValueChange={handleBairroChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o bairro" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border shadow-lg z-50 max-h-60">
+                        {deliveryZones.map((zone) => (
+                          <SelectItem key={zone.id} value={zone.bairro}>
+                            {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : '(Grátis)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
-                    <Label className="text-xs">Endereço</Label>
+                    <Label className="text-xs">Endereço *</Label>
                     <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Rua, número" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Ponto de Referência</Label>
+                    <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Próximo a..." />
                   </div>
                 </>
               )}
