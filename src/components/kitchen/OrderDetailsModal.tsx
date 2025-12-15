@@ -87,8 +87,8 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center justify-between">
             <span>Pedido #{orderNumber}</span>
             <Badge variant="outline">{orderTypeLabels[order.order_type] || order.order_type}</Badge>
@@ -98,7 +98,7 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
           {/* Customer Info */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm">
@@ -241,18 +241,18 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
               <span>R$ {order.total.toFixed(2)}</span>
             </div>
           </div>
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button onClick={handlePrint} className="flex-1" variant="outline">
-              <Printer className="h-4 w-4 mr-2" />
-              Imprimir Comanda
-            </Button>
-            <Button onClick={() => onPrint(order)} className="flex-1" variant="secondary">
-              <Printer className="h-4 w-4 mr-2" />
-              Visualizar
-            </Button>
-          </div>
+        {/* Actions - Fixed at bottom */}
+        <div className="flex gap-2 pt-4 flex-shrink-0 border-t mt-2">
+          <Button onClick={handlePrint} className="flex-1" variant="outline">
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimir Comanda
+          </Button>
+          <Button onClick={() => onPrint(order)} className="flex-1" variant="secondary">
+            <Printer className="h-4 w-4 mr-2" />
+            Visualizar
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
