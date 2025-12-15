@@ -103,15 +103,15 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         setTodayMeats(MEATS_BY_DAY[weekday] || []);
       }
 
-      // Buscar carnes assadas (porções) disponíveis
-      const { data: porcoes } = await supabase
+      // Buscar carnes assadas marcadas pelo admin
+      const { data: porcoes } = await (supabase as any)
         .from("items")
         .select("name")
         .eq("available", true)
-        .ilike("name", "%assad%");
+        .eq("is_grilled_meat", true);
       
       if (porcoes && porcoes.length > 0) {
-        setGrilledMeats(porcoes.map(p => p.name));
+        setGrilledMeats(porcoes.map((p: any) => p.name));
       }
     } catch (error) {
       console.error("Error fetching lunch:", error);
