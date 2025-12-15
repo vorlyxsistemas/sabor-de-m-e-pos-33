@@ -35,15 +35,22 @@ const addressObjectSchema = z.object({
 
 const createOrderBodySchema = z.object({
   customer_name: z.string().trim().min(2, 'Nome deve ter pelo menos 2 caracteres').max(100, 'Nome muito longo'),
-  customer_phone: z.string().trim().max(20).regex(/^[\d\s\(\)\-\+]*$/, 'Telefone inválido').optional().or(z.literal('')),
+  customer_phone: z
+    .union([
+      z.string().trim().max(20).regex(/^[\d\s\(\)\-\+]*$/, 'Telefone inválido'),
+      z.literal(''),
+      z.null(),
+    ])
+    .optional(),
   order_type: z.enum(['local', 'retirada', 'entrega']),
-  address: z.union([z.string().max(200), addressObjectSchema]).optional(),
-  bairro: z.string().trim().max(100).optional(),
-  cep: z.string().trim().max(10).optional(),
-  reference: z.string().trim().max(200).optional(),
-  scheduled_for: z.string().max(30).optional(),
+  // Accept nulls for backward compatibility (older clients sent null)
+  address: z.union([z.string().max(200), addressObjectSchema, z.null()]).optional(),
+  bairro: z.union([z.string().trim().max(100), z.null()]).optional(),
+  cep: z.union([z.string().trim().max(10), z.null()]).optional(),
+  reference: z.union([z.string().trim().max(200), z.null()]).optional(),
+  scheduled_for: z.union([z.string().max(30), z.null()]).optional(),
   items: z.array(orderItemInputSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
-  payment_method: z.string().max(50).optional(),
+  payment_method: z.union([z.string().max(50), z.null()]).optional(),
   user_id: z.string().uuid().nullable().optional(), // Link to authenticated user
 })
 
