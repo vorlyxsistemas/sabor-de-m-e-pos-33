@@ -42,6 +42,7 @@ interface Order {
   scheduled_for: string | null;
   payment_method: string | null;
   troco: number | null;
+  archived?: boolean;
   order_items: OrderItem[];
 }
 
@@ -60,6 +61,11 @@ function getNextStatus(current: OrderStatus): OrderStatus | null {
   return STATUS_ORDER[idx + 1];
 }
 
+const isMissingArchivedColumnError = (err: any) => {
+  const code = err?.code;
+  return code === "42703" || code === "PGRST204";
+};
+
 const Kanban = () => {
   const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -70,7 +76,12 @@ const Kanban = () => {
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState("kanban");
+  const [archiveSupported, setArchiveSupported] = useState(false);
   const printedOrdersRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!archiveSupported && activeTab !== "kanban") setActiveTab("kanban");
+  }, [archiveSupported, activeTab]);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -88,10 +99,37 @@ const Kanban = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
-      const { data, error } = await (supabase as any)
-        .from("orders")
-        .select(`
+      const queryBase = (select: string) =>
+        (supabase as any)
+          .from("orders")
+          .select(select)
+          .gte("created_at", today.toISOString())
+          .neq("status", "cancelled")
+          .order("created_at");
+
+      const selectWithArchived = `
+          id,
+          customer_name,
+          customer_phone,
+          status,
+          order_type,
+          address,
+          bairro,
+          cep,
+          reference,
+          subtotal,
+          delivery_tax,
+          extras_fee,
+          total,
+          created_at,
+          scheduled_for,
+          payment_method,
+          troco,
+          archived,
+          order_items(quantity, price, extras, tapioca_molhada, item:items(name))
+        `;
+
+      const selectWithoutArchived = `
           id,
           customer_name,
           customer_phone,
@@ -110,16 +148,31 @@ const Kanban = () => {
           payment_method,
           troco,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
-        `)
-        .gte("created_at", today.toISOString())
-        .neq("status", "cancelled")
-        .order("created_at");
+        `;
+
+      // 1) Try with archived (if schema supports it)
+      // @ts-ignore - archived/bairro/payment_method/troco columns exist but types are not updated
+      const { data, error } = await queryBase(selectWithArchived);
+
+      if (error && isMissingArchivedColumnError(error)) {
+        // 2) Fallback without archived (keeps Kanban working)
+        setArchiveSupported(false);
+        // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
+        const { data: fallbackData, error: fallbackError } = await queryBase(selectWithoutArchived);
+        if (fallbackError) throw fallbackError;
+
+        const allOrders = ((fallbackData || []) as Order[]).map((o) => ({ ...o, archived: false }));
+        setOrders(allOrders);
+        setArchivedOrders([]);
+        return;
+      }
 
       if (error) throw error;
-      
-      const allOrders = ((data || []) as Order[]);
-      setOrders(allOrders);
-      setArchivedOrders([]); // Archive feature disabled until column is added
+
+      setArchiveSupported(true);
+      const allOrders = ((data || []) as Order[]).map((o) => ({ ...o, archived: !!o.archived }));
+      setOrders(allOrders.filter((o) => !o.archived));
+      setArchivedOrders(allOrders.filter((o) => o.archived));
     } catch (error) {
       console.error("Erro ao buscar pedidos:", error);
       toast({
@@ -131,26 +184,29 @@ const Kanban = () => {
     }
   }, [toast]);
 
-  const autoPrintPendingOrders = useCallback((newOrders: Order[], shouldPrint: boolean) => {
-    if (!shouldPrint) return;
+  const autoPrintPendingOrders = useCallback(
+    (newOrders: Order[], shouldPrint: boolean) => {
+      if (!shouldPrint) return;
 
-    newOrders.forEach((order) => {
-      if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
-        printedOrdersRef.current.add(order.id);
-        setTimeout(() => {
-          try {
-            printReceipt(order);
-            toast({
-              title: "Comanda impressa",
-              description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
-            });
-          } catch (error) {
-            console.error("Erro ao imprimir comanda:", error);
-          }
-        }, 500);
-      }
-    });
-  }, [toast]);
+      newOrders.forEach((order) => {
+        if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
+          printedOrdersRef.current.add(order.id);
+          setTimeout(() => {
+            try {
+              printReceipt(order);
+              toast({
+                title: "Comanda impressa",
+                description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
+              });
+            } catch (error) {
+              console.error("Erro ao imprimir comanda:", error);
+            }
+          }, 500);
+        }
+      });
+    },
+    [toast]
+  );
 
   useEffect(() => {
     fetchSettings();
@@ -166,7 +222,7 @@ const Kanban = () => {
             method: "GET",
           });
           const shouldPrint = settings?.auto_print_enabled || false;
-          
+
           // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
           const { data: newOrder } = await (supabase as any)
             .from("orders")
@@ -192,20 +248,16 @@ const Kanban = () => {
             `)
             .eq("id", payload.new.id)
             .single();
-          
+
           if (newOrder && (newOrder as any).status === "pending") {
             autoPrintPendingOrders([newOrder as Order], shouldPrint);
           }
           fetchOrders();
         }
       )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orders" },
-        () => {
-          fetchOrders();
-        }
-      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => {
+        fetchOrders();
+      })
       .subscribe();
 
     return () => {
@@ -221,16 +273,11 @@ const Kanban = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from("orders")
-        .update({ status: nextStatus })
-        .eq("id", orderId);
+      const { error } = await supabase.from("orders").update({ status: nextStatus }).eq("id", orderId);
 
       if (error) throw error;
 
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-      );
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
 
       toast({
         title: "Status atualizado!",
@@ -247,19 +294,59 @@ const Kanban = () => {
   };
 
   const archiveOrder = async (orderId: string) => {
-    toast({
-      title: "Função indisponível",
-      description: "A coluna 'archived' precisa ser adicionada ao banco de dados.",
-      variant: "destructive",
-    });
+    if (!archiveSupported) {
+      toast({
+        title: "Arquivamento indisponível",
+        description: "Falta a coluna 'archived' no banco. Adicione-a para habilitar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("orders").update({ archived: true } as any).eq("id", orderId);
+      if (error) {
+        if (isMissingArchivedColumnError(error)) setArchiveSupported(false);
+        throw error;
+      }
+      toast({ title: "Pedido arquivado!" });
+      fetchOrders();
+    } catch (error: any) {
+      console.error("Erro ao arquivar:", error);
+      toast({
+        title: "Erro ao arquivar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    }
   };
 
   const unarchiveOrder = async (orderId: string) => {
-    toast({
-      title: "Função indisponível",
-      description: "A coluna 'archived' precisa ser adicionada ao banco de dados.",
-      variant: "destructive",
-    });
+    if (!archiveSupported) {
+      toast({
+        title: "Arquivamento indisponível",
+        description: "Falta a coluna 'archived' no banco. Adicione-a para habilitar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("orders").update({ archived: false } as any).eq("id", orderId);
+      if (error) {
+        if (isMissingArchivedColumnError(error)) setArchiveSupported(false);
+        throw error;
+      }
+      toast({ title: "Pedido restaurado!" });
+      fetchOrders();
+    } catch (error: any) {
+      console.error("Erro ao restaurar:", error);
+      toast({
+        title: "Erro ao restaurar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewDetails = (order: Order) => {
@@ -294,11 +381,13 @@ const Kanban = () => {
             Kanban
             <Badge variant="secondary">{orders.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="archived" className="gap-2">
-            <Archive className="h-4 w-4" />
-            Arquivados
-            <Badge variant="outline">{archivedOrders.length}</Badge>
-          </TabsTrigger>
+          {archiveSupported && (
+            <TabsTrigger value="archived" className="gap-2">
+              <Archive className="h-4 w-4" />
+              Arquivados
+              <Badge variant="outline">{archivedOrders.length}</Badge>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="kanban">
@@ -321,8 +410,7 @@ const Kanban = () => {
                           onViewDetails={() => handleViewDetails(order)}
                           canAdvance={col.status !== "delivered"}
                         />
-                        {/* Archive button for delivered orders */}
-                        {col.status === "delivered" && (
+                        {archiveSupported && col.status === "delivered" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -336,9 +424,7 @@ const Kanban = () => {
                       </div>
                     ))}
                     {columnOrders.length === 0 && (
-                      <div className="text-center text-muted-foreground text-sm py-8">
-                        Nenhum pedido
-                      </div>
+                      <div className="text-center text-muted-foreground text-sm py-8">Nenhum pedido</div>
                     )}
                   </div>
                 </div>
@@ -347,58 +433,58 @@ const Kanban = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="archived">
-          <div className="space-y-4">
-            {archivedOrders.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Archive className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Nenhum pedido arquivado hoje</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {archivedOrders.map((order) => (
-                  <Card key={order.id} className="opacity-75">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold">
-                          #{order.id.slice(-6).toUpperCase()}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {format(new Date(order.created_at), "HH:mm", { locale: ptBR })}
-                        </span>
-                      </div>
-                      <p className="text-sm">{order.customer_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {order.order_items?.length || 0} itens • R$ {Number(order.total).toFixed(2)}
-                      </p>
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 text-xs"
-                          onClick={() => handleViewDetails(order)}
-                        >
-                          Detalhes
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-xs gap-1"
-                          onClick={() => unarchiveOrder(order.id)}
-                        >
-                          <ArchiveX className="h-3 w-3" />
-                          Restaurar
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+        {archiveSupported && (
+          <TabsContent value="archived">
+            <div className="space-y-4">
+              {archivedOrders.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Archive className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Nenhum pedido arquivado hoje</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {archivedOrders.map((order) => (
+                    <Card key={order.id} className="opacity-75">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold">#{order.id.slice(-6).toUpperCase()}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(order.created_at), "HH:mm", { locale: ptBR })}
+                          </span>
+                        </div>
+                        <p className="text-sm">{order.customer_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {order.order_items?.length || 0} itens • R$ {Number(order.total).toFixed(2)}
+                        </p>
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-xs"
+                            onClick={() => handleViewDetails(order)}
+                          >
+                            Detalhes
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs gap-1"
+                            onClick={() => unarchiveOrder(order.id)}
+                          >
+                            <ArchiveX className="h-3 w-3" />
+                            Restaurar
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       <OrderDetailsModal
