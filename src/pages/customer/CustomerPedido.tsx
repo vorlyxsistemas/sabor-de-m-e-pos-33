@@ -39,6 +39,7 @@ interface CartItem {
   price: number;
   extras: { name: string; price: number }[];
   tapioca_molhada: boolean;
+  selected_variation?: string;
   isLunch?: boolean;
   lunchBase?: { id: string; name: string; price: number };
   lunchMeats?: string[];
@@ -136,18 +137,24 @@ const CustomerPedido = () => {
     setItems(data || []);
   };
 
-  const addToCart = (item: any, extras: any[] = [], tapioca_molhada = false) => {
+  const addToCart = (item: any, extras: any[] = [], tapioca_molhada = false, selected_variation?: string) => {
     const extrasTotal = extras.reduce((sum, e) => sum + Number(e.price), 0);
     const tapiocaExtra = tapioca_molhada ? 1 : 0;
     const price = Number(item.price) + extrasTotal + tapiocaExtra;
 
+    // Build display name with variation if present
+    const displayName = selected_variation 
+      ? `${item.name} (${selected_variation})`
+      : item.name;
+
     setCart([...cart, {
       item_id: item.id,
-      name: item.name,
+      name: displayName,
       quantity: 1,
       price,
       extras,
       tapioca_molhada,
+      selected_variation,
     }]);
     
     toast({ title: "Item adicionado ao carrinho!" });
@@ -268,22 +275,36 @@ const CustomerPedido = () => {
         source: 'web',
         payment_method: paymentMethod,
         troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
-        items: cart.map(item => ({
-          item_id: item.item_id,
-          quantity: item.quantity,
-          extras: item.isLunch 
-            ? {
-                type: "lunch",
-                base: item.lunchBase,
-                meats: item.lunchMeats,
-                extraMeats: item.lunchExtraMeats,
-                sides: item.lunchSides,
-                regularExtras: item.extras
-              }
-            : item.extras,
-          tapioca_molhada: item.tapioca_molhada,
-          price: item.price * item.quantity,
-        })),
+        items: cart.map(item => {
+          // Build extras object based on item type
+          let extrasData: any;
+          if (item.isLunch) {
+            extrasData = {
+              type: "lunch",
+              base: item.lunchBase,
+              meats: item.lunchMeats,
+              extraMeats: item.lunchExtraMeats,
+              sides: item.lunchSides,
+              regularExtras: item.extras
+            };
+          } else if (item.selected_variation) {
+            // Item with variation - include variation in extras object
+            extrasData = {
+              selected_variation: item.selected_variation,
+              regularExtras: item.extras
+            };
+          } else {
+            extrasData = item.extras;
+          }
+
+          return {
+            item_id: item.item_id,
+            quantity: item.quantity,
+            extras: extrasData,
+            tapioca_molhada: item.tapioca_molhada,
+            price: item.price * item.quantity,
+          };
+        }),
       };
 
       // Only add address fields for delivery orders

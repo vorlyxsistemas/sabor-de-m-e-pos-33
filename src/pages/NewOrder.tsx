@@ -22,6 +22,7 @@ interface CartItem {
   price: number;
   extras: { name: string; price: number }[];
   tapioca_molhada: boolean;
+  selected_variation?: string;
   // Lunch specific fields
   isLunch?: boolean;
   lunchBase?: { id: string; name: string; price: number };
@@ -77,24 +78,30 @@ const NewOrder = () => {
   const fetchItems = async () => {
     const { data } = await supabase
       .from('items')
-      .select('id, name, price, description, available, allow_extras, allow_tapioca_molhada, is_molhado_by_default, image_url, extras(*)')
+      .select('id, name, price, description, available, allow_extras, allow_tapioca_molhada, is_molhado_by_default, image_url, requires_variation, variation_options, extras(*)')
       .eq('category_id', selectedCategory)
       .eq('available', true);
     setItems(data || []);
   };
 
-  const addToCart = (item: any, extras: any[] = [], tapioca_molhada = false) => {
+  const addToCart = (item: any, extras: any[] = [], tapioca_molhada = false, selected_variation?: string) => {
     const extrasTotal = extras.reduce((sum, e) => sum + Number(e.price), 0);
     const tapiocaExtra = tapioca_molhada ? 1 : 0;
     const price = Number(item.price) + extrasTotal + tapiocaExtra;
 
+    // Build display name with variation if present
+    const displayName = selected_variation 
+      ? `${item.name} (${selected_variation})`
+      : item.name;
+
     setCart([...cart, {
       item_id: item.id,
-      name: item.name,
+      name: displayName,
       quantity: 1,
       price,
       extras,
       tapioca_molhada,
+      selected_variation,
     }]);
   };
 
@@ -195,23 +202,35 @@ const NewOrder = () => {
 
       if (orderError) throw orderError;
 
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        item_id: item.item_id,
-        quantity: item.quantity,
-        extras: item.isLunch 
-          ? {
-              type: "lunch",
-              base: item.lunchBase,
-              meats: item.lunchMeats,
-              extraMeats: item.lunchExtraMeats,
-              sides: item.lunchSides,
-              regularExtras: item.extras
-            }
-          : item.extras,
-        tapioca_molhada: item.tapioca_molhada,
-        price: item.price * item.quantity,
-      }));
+      const orderItems = cart.map(item => {
+        let extrasData: any;
+        if (item.isLunch) {
+          extrasData = {
+            type: "lunch",
+            base: item.lunchBase,
+            meats: item.lunchMeats,
+            extraMeats: item.lunchExtraMeats,
+            sides: item.lunchSides,
+            regularExtras: item.extras
+          };
+        } else if (item.selected_variation) {
+          extrasData = {
+            selected_variation: item.selected_variation,
+            regularExtras: item.extras
+          };
+        } else {
+          extrasData = item.extras;
+        }
+
+        return {
+          order_id: order.id,
+          item_id: item.item_id,
+          quantity: item.quantity,
+          extras: extrasData,
+          tapioca_molhada: item.tapioca_molhada,
+          price: item.price * item.quantity,
+        };
+      });
 
       await supabase.from('order_items').insert(orderItems);
 

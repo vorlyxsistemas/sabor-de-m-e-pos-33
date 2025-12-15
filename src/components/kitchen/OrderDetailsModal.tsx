@@ -175,6 +175,13 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                       </span>
                     </div>
                     
+                    {/* Selected Variation (e.g., type of broth) */}
+                    {!isLunch && extras?.selected_variation && (
+                      <div className="mt-1 text-xs text-amber-600 pl-2 font-medium">
+                        Tipo: {extras.selected_variation}
+                      </div>
+                    )}
+                    
                     {/* Lunch Details */}
                     {isLunch && (
                       <div className="mt-1 space-y-1 text-xs text-muted-foreground pl-2">
