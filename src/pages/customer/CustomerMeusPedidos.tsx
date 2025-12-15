@@ -11,18 +11,22 @@ import { ptBR } from "date-fns/locale";
 interface Order {
   id: string;
   customer_name: string;
+  customer_phone: string | null;
   order_type: string;
   status: string;
   subtotal: number;
   delivery_tax: number;
+  extras_fee: number;
   total: number;
   address: string | null;
+  bairro: string | null;
   created_at: string;
   order_items: {
     id: string;
     quantity: number;
     price: number;
     extras: any;
+    tapioca_molhada: boolean;
     items: { name: string } | null;
   }[];
 }
@@ -48,10 +52,10 @@ const CustomerMeusPedidos = () => {
     // @ts-ignore - Supabase types issue with complex queries
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, order_type, status, subtotal, delivery_tax, total, address, created_at, order_items(id, quantity, price, extras, items(name))')
+      .select('id, customer_name, customer_phone, order_type, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, order_items(id, quantity, price, extras, tapioca_molhada, items(name))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(20) as any;
 
     console.log('Orders fetched:', data, 'Error:', error);
 
@@ -130,7 +134,7 @@ const CustomerMeusPedidos = () => {
                       </div>
                       <div>
                         <CardTitle className="text-base">
-                          Pedido #{order.id.slice(0, 8).toUpperCase()}
+                          Pedido #{order.id.slice(-6).toUpperCase()}
                         </CardTitle>
                         <p className="text-xs text-muted-foreground">
                           {format(new Date(order.created_at), "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
@@ -178,27 +182,63 @@ const CustomerMeusPedidos = () => {
                   )}
 
                   {/* Order Items */}
-                  <div className="space-y-1 text-sm">
-                    {order.order_items.map((item, idx) => (
-                      <div key={item.id || idx} className="flex justify-between text-muted-foreground">
-                        <span>{item.quantity}x {item.items?.name || 'Item'}</span>
-                        <span>R$ {Number(item.price).toFixed(2)}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-2 text-sm border rounded-lg p-3 bg-muted/30">
+                    <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Itens do Pedido</p>
+                    {order.order_items.map((item, idx) => {
+                      const extras = Array.isArray(item.extras) ? item.extras : [];
+                      return (
+                        <div key={item.id || idx} className="flex justify-between items-start">
+                          <div>
+                            <span className="font-medium">{item.quantity}x {item.items?.name || 'Item'}</span>
+                            {item.tapioca_molhada && (
+                              <Badge variant="secondary" className="ml-2 text-[10px]">Molhada</Badge>
+                            )}
+                            {extras.length > 0 && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                + {extras.map((e: any) => e.name || e).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <span className="font-medium">R$ {(Number(item.price) * item.quantity).toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Address */}
-                  {order.order_type === 'entrega' && order.address && (
-                    <div className="text-sm text-muted-foreground flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      <span>{order.address}</span>
+                  {order.order_type === 'entrega' && (order.address || order.bairro) && (
+                    <div className="text-sm text-muted-foreground flex items-start gap-2 bg-muted/30 rounded-lg p-3">
+                      <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium text-foreground">Endereço de Entrega</p>
+                        {order.address && <p>{order.address}</p>}
+                        {order.bairro && <p>{order.bairro}</p>}
+                      </div>
                     </div>
                   )}
 
-                  {/* Total */}
-                  <div className="flex justify-between pt-2 border-t font-medium">
-                    <span>Total</span>
-                    <span className="text-primary">R$ {Number(order.total).toFixed(2)}</span>
+                  {/* Totals breakdown */}
+                  <div className="space-y-1 pt-2 border-t text-sm">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Subtotal</span>
+                      <span>R$ {Number(order.subtotal).toFixed(2)}</span>
+                    </div>
+                    {Number(order.extras_fee) > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Extras</span>
+                        <span>R$ {Number(order.extras_fee).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {order.order_type === 'entrega' && Number(order.delivery_tax) > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Taxa de Entrega</span>
+                        <span>R$ {Number(order.delivery_tax).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-base pt-1">
+                      <span>Total</span>
+                      <span className="text-primary">R$ {Number(order.total).toFixed(2)}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
