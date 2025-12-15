@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 
 const menuItems = [
   { title: "Início", url: "/cliente", icon: Home },
-  { title: "Cardápio", url: "/cliente/cardapio", icon: UtensilsCrossed },
   { title: "Fazer Pedido", url: "/cliente/pedido", icon: ShoppingCart },
   { title: "Meus Pedidos", url: "/cliente/meus-pedidos", icon: ClipboardList },
 ];
