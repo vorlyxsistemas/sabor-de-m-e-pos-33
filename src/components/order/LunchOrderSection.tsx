@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Plus, Minus, UtensilsCrossed } from "lucide-react";
 
-// Bases fixas do almoço com preços
+// Bases fixas do almoço com preços (2 carnes e 1 carne)
 const LUNCH_BASES = [
-  { id: "arroz_feijao", name: "Arroz e Feijão Carioca", price: 14.0 },
-  { id: "baiao_fava", name: "Baião de Fava", price: 14.0 },
-  { id: "baiao_pequi", name: "Baião de Pequi", price: 14.0 },
-  { id: "baiao_cremoso", name: "Baião Cremoso", price: 16.0 },
-  { id: "baiao_simples", name: "Baião Simples", price: 14.0 },
+  { id: "arroz_feijao", name: "Arroz e Feijão Carioca", price: 14.0, singleMeatPrice: 12.0 },
+  { id: "baiao_fava", name: "Baião de Fava", price: 14.0, singleMeatPrice: 12.0 },
+  { id: "baiao_pequi", name: "Baião de Pequi", price: 14.0, singleMeatPrice: 12.0 },
+  { id: "baiao_cremoso", name: "Baião Cremoso", price: 16.0, singleMeatPrice: 14.0 },
+  { id: "baiao_simples", name: "Baião Simples", price: 14.0, singleMeatPrice: 12.0 },
 ];
 
 // Carnes por dia da semana (0 = Domingo, 6 = Sábado)
@@ -162,7 +162,8 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
     const base = LUNCH_BASES.find(b => b.id === selectedBase);
     if (!base) return 0;
 
-    const basePrice = base.price;
+    // Usar preço de 1 carne quando meatOption for "one"
+    const basePrice = meatOption === "one" ? base.singleMeatPrice : base.price;
     const extraMeatsPrice = extraMeats.length * EXTRA_MEAT_PRICE;
     
     return (basePrice + extraMeatsPrice) * quantity;
@@ -233,19 +234,22 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         </CardHeader>
         <CardContent className="space-y-2">
           <RadioGroup value={selectedBase} onValueChange={setSelectedBase}>
-            {LUNCH_BASES.map(base => (
-              <div key={base.id} className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value={base.id} id={base.id} />
-                  <Label htmlFor={base.id} className="text-sm cursor-pointer">
-                    {base.name}
-                  </Label>
+            {LUNCH_BASES.map(base => {
+              const displayPrice = meatOption === "one" ? base.singleMeatPrice : base.price;
+              return (
+                <div key={base.id} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value={base.id} id={base.id} />
+                    <Label htmlFor={base.id} className="text-sm cursor-pointer">
+                      {base.name}
+                    </Label>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    R$ {displayPrice.toFixed(2)}
+                  </span>
                 </div>
-                <span className="text-sm text-muted-foreground">
-                  R$ {base.price.toFixed(2)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </RadioGroup>
         </CardContent>
       </Card>
