@@ -66,7 +66,9 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
   if (!order) return null;
 
   const orderNumber = order.id.slice(-6).toUpperCase();
-  const paymentLabel = paymentMethodLabels[order.payment_method || ""] || order.payment_method || "Não informado";
+  const paymentRaw = (order.payment_method || "").trim();
+  const paymentKey = paymentRaw.toLowerCase();
+  const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "Não informado");
 
   const handlePrint = () => {
     printReceipt(order);
@@ -130,28 +132,28 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           )}
 
           {/* Payment Info */}
-          <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <CreditCard className="h-4 w-4" />
-              Pagamento: {paymentLabel}
-            </div>
-            {order.payment_method === "dinheiro" && order.troco && (
-              <p className="text-sm font-medium text-orange-600">Troco para: R$ {order.troco.toFixed(2)}</p>
-            )}
-            {order.payment_method === "pix" && (
-              <div className="space-y-2 pt-1">
-                <p className="text-xs text-muted-foreground">Chave PIX (Telefone):</p>
-                <div className="flex items-center gap-2">
-                  <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
-                  <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
-                    {copiedPix ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    {copiedPix ? 'Copiado' : 'Copiar'}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Favorecido: {PIX_OWNER}</p>
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <CreditCard className="h-4 w-4" />
+                Pagamento: {paymentLabel}
               </div>
-            )}
-          </div>
+              {paymentKey === "dinheiro" && order.troco && (
+                <p className="text-sm font-medium text-orange-600">Troco para: R$ {order.troco.toFixed(2)}</p>
+              )}
+              {paymentKey === "pix" && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-xs text-muted-foreground">Chave PIX (Telefone):</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
+                    <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
+                      {copiedPix ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {copiedPix ? 'Copiado' : 'Copiar'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Favorecido: {PIX_OWNER}</p>
+                </div>
+              )}
+            </div>
 
           {/* Items */}
           <div className="space-y-2">

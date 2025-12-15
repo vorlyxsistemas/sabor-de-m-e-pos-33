@@ -185,11 +185,15 @@ const CustomerMeusPedidos = () => {
                   <div className="space-y-2 text-sm border rounded-lg p-3 bg-muted/30">
                     <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Itens do Pedido</p>
                     {order.order_items.map((item, idx) => {
+                      const extrasAny = item.extras as any;
+                      const isLunch = extrasAny?.type === "lunch";
+                      const itemLabel = item.item?.name || (isLunch ? `Almoço - ${extrasAny?.base?.name}` : "Item");
                       const extras = Array.isArray(item.extras) ? item.extras : [];
+
                       return (
                         <div key={item.id || idx} className="flex justify-between items-start">
                           <div>
-                            <span className="font-medium">{item.quantity}x {item.item?.name || 'Item'}</span>
+                            <span className="font-medium">{item.quantity}x {itemLabel}</span>
                             {item.tapioca_molhada && (
                               <Badge variant="secondary" className="ml-2 text-[10px]">Molhada</Badge>
                             )}

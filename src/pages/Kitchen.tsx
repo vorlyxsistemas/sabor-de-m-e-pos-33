@@ -91,6 +91,7 @@ const Kitchen = () => {
           status,
           order_type,
           address,
+          bairro,
           cep,
           reference,
           subtotal,
@@ -99,6 +100,8 @@ const Kitchen = () => {
           total,
           created_at,
           scheduled_for,
+          payment_method,
+          troco,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
         `)
         .gte("created_at", today.toISOString())
@@ -179,6 +182,7 @@ const Kitchen = () => {
               status,
               order_type,
               address,
+              bairro,
               cep,
               reference,
               subtotal,
@@ -187,6 +191,8 @@ const Kitchen = () => {
               total,
               created_at,
               scheduled_for,
+              payment_method,
+              troco,
               order_items(quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)
