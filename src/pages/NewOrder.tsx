@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, Banknote, CreditCard, QrCode } from "lucide-react";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
 
@@ -55,6 +55,8 @@ const NewOrder = () => {
   const [address, setAddress] = useState('');
   const [bairro, setBairro] = useState('');
   const [deliveryTax, setDeliveryTax] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
+  const [troco, setTroco] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -185,6 +187,8 @@ const NewOrder = () => {
           subtotal,
           total,
           status: 'pending',
+          payment_method: paymentMethod,
+          troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
         })
         .select()
         .single();
@@ -397,6 +401,45 @@ const NewOrder = () => {
                     <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Rua, número" />
                   </div>
                 </>
+              )}
+              
+              {/* Payment Method */}
+              <div>
+                <Label className="text-xs font-medium">Forma de Pagamento *</Label>
+                <RadioGroup value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} className="grid grid-cols-3 gap-2 mt-2">
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'pix' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="pix" id="pix" className="sr-only" />
+                    <Label htmlFor="pix" className="cursor-pointer text-center">
+                      <QrCode className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Pix</span>
+                    </Label>
+                  </div>
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'dinheiro' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="dinheiro" id="dinheiro" className="sr-only" />
+                    <Label htmlFor="dinheiro" className="cursor-pointer text-center">
+                      <Banknote className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Dinheiro</span>
+                    </Label>
+                  </div>
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'cartao' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="cartao" id="cartao" className="sr-only" />
+                    <Label htmlFor="cartao" className="cursor-pointer text-center">
+                      <CreditCard className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Cartão</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              {paymentMethod === 'dinheiro' && (
+                <div>
+                  <Label className="text-xs">Troco para quanto?</Label>
+                  <Input 
+                    type="number" 
+                    value={troco} 
+                    onChange={e => setTroco(e.target.value)} 
+                    placeholder="Ex: 50.00 (deixe vazio se não precisar)"
+                  />
+                </div>
               )}
               <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
                 {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
