@@ -100,11 +100,13 @@ export function generateReceiptHTML(order: Order): string {
   }
 
   // Payment section
-  const paymentLabel = paymentMethodLabels[order.payment_method || ""] || order.payment_method || "NÃO INFORMADO";
+  const paymentRaw = (order.payment_method || "").trim();
+  const paymentKey = paymentRaw.toLowerCase();
+  const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NÃO INFORMADO");
   let paymentSection = `
     <div style="margin-top: 8px; border: 2px solid #000; padding: 8px;">
       <div style="font-weight: bold; font-size: 13px;">PAGAMENTO: ${paymentLabel}</div>
-      ${order.payment_method === "dinheiro" && order.troco ? `<div style="font-weight: bold;">TROCO PARA: R$ ${order.troco.toFixed(2)}</div>` : ""}
+      ${paymentKey === "dinheiro" && order.troco ? `<div style="font-weight: bold;">TROCO PARA: R$ ${order.troco.toFixed(2)}</div>` : ""}
     </div>
   `;
 
@@ -365,10 +367,12 @@ export function generateESCPOSCommands(order: Order): Uint8Array {
   // Payment info
   commands.push(LF);
   commands.push(...encoder.encode("================================\n"));
-  const paymentLabel = paymentMethodLabels[order.payment_method || ""] || order.payment_method || "NAO INFORMADO";
+  const paymentRaw = (order.payment_method || "").trim();
+  const paymentKey = paymentRaw.toLowerCase();
+  const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NAO INFORMADO");
   commands.push(ESC, 0x45, 0x01);
   commands.push(...encoder.encode(`PAGAMENTO: ${paymentLabel}\n`));
-  if (order.payment_method === "dinheiro" && order.troco) {
+  if (paymentKey === "dinheiro" && order.troco) {
     commands.push(...encoder.encode(`TROCO PARA: R$ ${order.troco.toFixed(2)}\n`));
   }
   commands.push(ESC, 0x45, 0x00);

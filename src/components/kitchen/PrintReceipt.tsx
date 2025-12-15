@@ -66,7 +66,9 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
 
   const orderNumber = order.id.slice(-6).toUpperCase();
   const dateTime = format(new Date(order.created_at), "dd/MM/yyyy HH:mm");
-  const paymentLabel = paymentMethodLabels[order.payment_method || ""] || order.payment_method || "NÃO INFORMADO";
+  const paymentRaw = (order.payment_method || "").trim();
+  const paymentKey = paymentRaw.toLowerCase();
+  const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NÃO INFORMADO");
 
   return (
     <div className="fixed inset-0 bg-background z-50 p-4 overflow-auto print:p-0">
@@ -221,7 +223,7 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
         {/* Payment Info */}
         <div className="mt-2 border-2 border-black p-2">
           <div className="font-bold">PAGAMENTO: {paymentLabel}</div>
-          {order.payment_method === "dinheiro" && order.troco && (
+          {paymentKey === "dinheiro" && order.troco && (
             <div className="font-bold">TROCO PARA: R$ {order.troco.toFixed(2)}</div>
           )}
         </div>
