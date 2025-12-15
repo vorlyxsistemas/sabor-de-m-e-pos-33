@@ -219,7 +219,7 @@ const Users = () => {
 
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-users-update', {
+      const { data, error } = await supabase.functions.invoke('update-user', {
         body: {
           user_id: selectedUser.id,
           name: editFormData.name,
@@ -253,7 +253,7 @@ const Users = () => {
 
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-users-remove', {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
         body: { user_id: selectedUser.id },
       });
 
