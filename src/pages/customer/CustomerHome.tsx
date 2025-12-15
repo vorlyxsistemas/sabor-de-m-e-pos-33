@@ -1,10 +1,9 @@
 import { CustomerLayout } from "@/components/layout/CustomerLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { UtensilsCrossed, ShoppingCart, Clock } from "lucide-react";
+import { ShoppingCart, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-
 const CustomerHome = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -21,24 +20,7 @@ const CustomerHome = () => {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/cliente/cardapio")}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <UtensilsCrossed className="h-5 w-5 text-primary" />
-                Ver Cardápio
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Confira nosso cardápio completo com tapiocas, lanches, almoço e muito mais.
-              </p>
-              <Button variant="outline" className="w-full">
-                Ver Cardápio
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="max-w-md mx-auto">
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate("/cliente/pedido")}>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg">
