@@ -218,22 +218,16 @@ const CustomerPedido = () => {
       const trimmedBairro = bairro.trim();
       const trimmedAddress = address.trim();
 
-      const orderData = {
+      // Build order data - only include address/bairro for delivery orders
+      const orderData: Record<string, unknown> = {
         customer_name: customerName.trim(),
-        customer_phone: customerPhone?.trim() || null,
+        customer_phone: customerPhone?.trim() || '',
         order_type: orderType,
-        // Send both nested address object and flat bairro field to be compatible
-        // with all versions of the orders edge function
-        address: isDelivery && trimmedAddress
-          ? { street: trimmedAddress, bairro: trimmedBairro || undefined }
-          : null,
-        bairro: isDelivery ? trimmedBairro || null : null,
         delivery_tax: isDelivery ? deliveryTax : 0,
         subtotal,
         total,
         status: 'pending',
         source: 'web',
-        user_id: user?.id || null, // Link order to authenticated user
         items: cart.map(item => ({
           item_id: item.item_id,
           quantity: item.quantity,
@@ -251,6 +245,12 @@ const CustomerPedido = () => {
           price: item.price * item.quantity,
         })),
       };
+
+      // Only add address fields for delivery orders
+      if (isDelivery) {
+        orderData.address = trimmedAddress || '';
+        orderData.bairro = trimmedBairro || '';
+      }
 
       const { data, error: orderError } = await supabase.functions.invoke('orders', {
         method: 'POST',
