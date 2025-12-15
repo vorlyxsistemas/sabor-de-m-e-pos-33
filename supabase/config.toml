@@ -27,10 +27,10 @@ verify_jwt = false
 [functions.create-user]
 verify_jwt = true
 
-[functions.update-user]
+[functions.admin-users-update]
 verify_jwt = true
 
-[functions.delete-user]
+[functions.admin-users-remove]
 verify_jwt = true
 
 [functions.settings]
