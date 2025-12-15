@@ -28,6 +28,7 @@ interface ItemCardProps {
     image_url?: string | null;
     requires_variation?: boolean;
     variation_options?: string[] | null;
+    extras?: { id: string; name: string; price: number }[]; // Item-specific extras
   };
   categoryName?: string;
   onAddToCart: (item: any, extras: Extra[], tapiocaMolhada: boolean, selectedVariation?: string) => void;
@@ -53,12 +54,14 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
   // Check if item requires variation selection (like "1/2 caldo")
   const requiresVariation = item.requires_variation && item.variation_options && item.variation_options.length > 0;
 
-  // Fetch available extras for this item's category
+  // Fetch available extras for this item's category + item-specific extras
   useEffect(() => {
     if (canHaveExtras) {
       fetchExtras();
+    } else {
+      setAvailableExtras([]);
     }
-  }, [categoryName, canHaveExtras]);
+  }, [categoryName, canHaveExtras, item.id]);
 
   // Reset variation when item changes
   useEffect(() => {
@@ -66,20 +69,39 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
   }, [item.id]);
 
   const fetchExtras = async () => {
+    // Start with item-specific extras
+    const itemExtras: Extra[] = (item.extras || []).map(e => ({
+      id: e.id,
+      name: e.name,
+      price: Number(e.price),
+    }));
+
+    // Fetch global extras for this category
     const { data } = await supabase
       .from("global_extras")
       .select("*")
       .or(`applies_to_category.is.null,applies_to_category.eq.${categoryName}`)
       .order("name");
     
-    if (data) {
-      setAvailableExtras(data.map(e => ({
-        id: e.id,
-        name: e.name,
-        price: Number(e.price),
-        code: e.code
-      })));
+    const globalExtras: Extra[] = (data || []).map(e => ({
+      id: e.id,
+      name: e.name,
+      price: Number(e.price),
+      code: e.code
+    }));
+
+    // Combine both, avoiding duplicates by name
+    const seenNames = new Set<string>();
+    const combined: Extra[] = [];
+    
+    for (const extra of [...itemExtras, ...globalExtras]) {
+      if (!seenNames.has(extra.name.toLowerCase())) {
+        seenNames.add(extra.name.toLowerCase());
+        combined.push(extra);
+      }
     }
+
+    setAvailableExtras(combined);
   };
 
   const handleExtraToggle = (extra: Extra) => {
