@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, AlertCircle, Banknote, CreditCard, QrCode, Copy, Check } from "lucide-react";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -26,6 +27,10 @@ const addressSchema = z.object({
   bairro: z.string().trim().min(2, "Bairro obrigatório").max(100, "Bairro muito longo"),
   address: z.string().trim().min(5, "Endereço obrigatório").max(200, "Endereço muito longo"),
 });
+
+// PIX info
+const PIX_KEY = "88982207599";
+const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
 
 interface CartItem {
   item_id: string | null;
@@ -51,6 +56,12 @@ interface LunchCartItem {
   totalPrice: number;
 }
 
+interface DeliveryZone {
+  id: string;
+  bairro: string;
+  taxa: number;
+}
+
 const CustomerPedido = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -65,7 +76,12 @@ const CustomerPedido = () => {
   const [customerPhone, setCustomerPhone] = useState(user?.user_metadata?.phone || '');
   const [address, setAddress] = useState('');
   const [bairro, setBairro] = useState('');
+  const [reference, setReference] = useState('');
   const [deliveryTax, setDeliveryTax] = useState(0);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
+  const [troco, setTroco] = useState('');
+  const [copiedPix, setCopiedPix] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [isClosed, setIsClosed] = useState(false);
@@ -73,11 +89,20 @@ const CustomerPedido = () => {
 
   useEffect(() => {
     fetchMenu();
+    fetchDeliveryZones();
   }, []);
 
   useEffect(() => {
     if (selectedCategory) fetchItems();
   }, [selectedCategory]);
+
+  const fetchDeliveryZones = async () => {
+    const { data } = await supabase
+      .from('delivery_zones')
+      .select('id, bairro, taxa')
+      .order('bairro');
+    setDeliveryZones(data || []);
+  };
 
   const fetchMenu = async () => {
     try {
@@ -167,14 +192,21 @@ const CustomerPedido = () => {
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = subtotal + (orderType === 'entrega' ? deliveryTax : 0);
 
-  const fetchDeliveryTax = async () => {
-    if (!bairro.trim()) return;
-    const { data } = await supabase
-      .from('delivery_zones')
-      .select('taxa')
-      .ilike('bairro', `%${bairro}%`)
-      .maybeSingle();
-    setDeliveryTax(data?.taxa || 0);
+  const handleBairroChange = (selectedBairro: string) => {
+    setBairro(selectedBairro);
+    const zone = deliveryZones.find(z => z.bairro === selectedBairro);
+    setDeliveryTax(zone?.taxa || 0);
+  };
+
+  const handleCopyPix = async () => {
+    try {
+      await navigator.clipboard.writeText(PIX_KEY);
+      setCopiedPix(true);
+      toast({ title: "Chave PIX copiada!" });
+      setTimeout(() => setCopiedPix(false), 2000);
+    } catch {
+      toast({ title: "Erro ao copiar", variant: "destructive" });
+    }
   };
 
   const handleSubmit = async () => {
@@ -211,12 +243,18 @@ const CustomerPedido = () => {
       return;
     }
 
+    if (!paymentMethod) {
+      toast({ title: "Selecione a forma de pagamento", variant: "destructive" });
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Use edge function to create order (bypasses RLS)
       const isDelivery = orderType === 'entrega';
       const trimmedBairro = bairro.trim();
       const trimmedAddress = address.trim();
+      const trimmedReference = reference.trim();
 
       // Build order data - only include address/bairro for delivery orders
       const orderData: Record<string, unknown> = {
@@ -228,6 +266,8 @@ const CustomerPedido = () => {
         total,
         status: 'pending',
         source: 'web',
+        payment_method: paymentMethod,
+        troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
         items: cart.map(item => ({
           item_id: item.item_id,
           quantity: item.quantity,
@@ -250,6 +290,7 @@ const CustomerPedido = () => {
       if (isDelivery) {
         orderData.address = trimmedAddress || '';
         orderData.bairro = trimmedBairro || '';
+        orderData.reference = trimmedReference || '';
       }
 
       const { data, error: orderError } = await supabase.functions.invoke('orders', {
@@ -461,15 +502,18 @@ const CustomerPedido = () => {
                 <>
                   <div>
                     <Label className="text-xs">Bairro *</Label>
-                    <div className="flex gap-2">
-                      <Input 
-                        value={bairro} 
-                        onChange={e => setBairro(e.target.value)} 
-                        placeholder="Bairro" 
-                        maxLength={100}
-                      />
-                      <Button variant="outline" size="sm" onClick={fetchDeliveryTax}>Buscar</Button>
-                    </div>
+                    <Select value={bairro} onValueChange={handleBairroChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o bairro" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {deliveryZones.map(zone => (
+                          <SelectItem key={zone.id} value={zone.bairro}>
+                            {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : '(Grátis)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label className="text-xs">Endereço *</Label>
@@ -480,8 +524,72 @@ const CustomerPedido = () => {
                       maxLength={200}
                     />
                   </div>
+                  <div>
+                    <Label className="text-xs">Ponto de Referência</Label>
+                    <Input 
+                      value={reference} 
+                      onChange={e => setReference(e.target.value)} 
+                      placeholder="Ex: Próximo à padaria" 
+                      maxLength={200}
+                    />
+                  </div>
                 </>
               )}
+
+              {/* Payment Method */}
+              <div>
+                <Label className="text-xs font-medium">Forma de Pagamento *</Label>
+                <RadioGroup value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} className="grid grid-cols-3 gap-2 mt-2">
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'pix' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="pix" id="pix" className="sr-only" />
+                    <Label htmlFor="pix" className="cursor-pointer text-center">
+                      <QrCode className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Pix</span>
+                    </Label>
+                  </div>
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'dinheiro' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="dinheiro" id="dinheiro" className="sr-only" />
+                    <Label htmlFor="dinheiro" className="cursor-pointer text-center">
+                      <Banknote className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Dinheiro</span>
+                    </Label>
+                  </div>
+                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'cartao' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <RadioGroupItem value="cartao" id="cartao" className="sr-only" />
+                    <Label htmlFor="cartao" className="cursor-pointer text-center">
+                      <CreditCard className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">Cartão</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {paymentMethod === 'dinheiro' && (
+                <div>
+                  <Label className="text-xs">Troco para quanto?</Label>
+                  <Input 
+                    type="number" 
+                    value={troco} 
+                    onChange={e => setTroco(e.target.value)} 
+                    placeholder="Ex: 50.00 (deixe vazio se não precisar)"
+                  />
+                </div>
+              )}
+
+              {paymentMethod === 'pix' && (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-medium">Chave PIX (Telefone):</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
+                    <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
+                      {copiedPix ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {copiedPix ? 'Copiado' : 'Copiar'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Favorecido: {PIX_OWNER}</p>
+                </div>
+              )}
+
               <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
                 {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Finalizar Pedido
