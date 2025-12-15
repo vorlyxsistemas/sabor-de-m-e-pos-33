@@ -38,8 +38,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserPlus, Pencil, Trash2 } from "lucide-react";
+import { Loader2, UserPlus, Pencil, Trash2, FileDown } from "lucide-react";
 import { z } from "zod";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface UserWithRole {
   id: string;
@@ -288,9 +290,58 @@ const Users = () => {
     }
   };
 
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return 'Admin';
+      case 'staff':
+        return 'Staff';
+      default:
+        return 'Cliente';
+    }
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(18);
+    doc.text('Sabor de Mãe - Usuários', 14, 22);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 30);
+    
+    // Table data
+    const tableData = users.map((user) => [
+      user.name || '-',
+      user.phone || '-',
+      getRoleLabel(user.role),
+      new Date(user.created_at).toLocaleDateString('pt-BR'),
+    ]);
+
+    autoTable(doc, {
+      startY: 38,
+      head: [['Nome', 'Telefone', 'Permissão', 'Criado em']],
+      body: tableData,
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [234, 88, 12] }, // primary color
+    });
+
+    doc.save('usuarios-sabor-de-mae.pdf');
+    
+    toast({
+      title: "PDF gerado!",
+      description: "A lista de usuários foi exportada com sucesso.",
+    });
+  };
+
   return (
     <AdminLayout title="Usuários" subtitle="Gerencie os usuários do sistema">
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
+        <Button variant="outline" onClick={handleExportPDF} className="gap-2" disabled={users.length === 0}>
+          <FileDown className="h-4 w-4" />
+          Exportar PDF
+        </Button>
         <Button onClick={openCreateDialog} className="gap-2">
           <UserPlus className="h-4 w-4" />
           Novo Usuário
