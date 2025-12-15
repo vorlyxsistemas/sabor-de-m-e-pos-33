@@ -37,7 +37,7 @@ const orderItemInputSchema = z.object({
   quantity: z.number().int().min(1).max(50),
   price: z.number().min(0).max(9999.99).optional(),
   tapioca_molhada: z.boolean().optional().default(false),
-  extras: z.union([z.array(extraSchema), lunchExtrasSchema]).optional().default([]), // array OR lunch object
+  extras: z.union([z.array(extraSchema), lunchExtrasSchema]).optional().default([]),
 })
 
 const addressObjectSchema = z.object({
@@ -57,7 +57,6 @@ const createOrderBodySchema = z.object({
     ])
     .optional(),
   order_type: z.enum(['local', 'retirada', 'entrega']),
-  // Accept nulls for backward compatibility (older clients sent null)
   address: z.union([z.string().max(200), addressObjectSchema, z.null()]).optional(),
   bairro: z.union([z.string().trim().max(100), z.null()]).optional(),
   cep: z.union([z.string().trim().max(10), z.null()]).optional(),
@@ -66,7 +65,7 @@ const createOrderBodySchema = z.object({
   items: z.array(orderItemInputSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
   payment_method: z.union([z.string().max(50), z.null()]).optional(),
   troco: z.union([z.number().min(0).max(9999.99), z.null()]).optional(),
-  user_id: z.string().uuid().nullable().optional(), // Link to authenticated user
+  user_id: z.string().uuid().nullable().optional(),
 })
 
 const updateOrderStatusSchema = z.object({
@@ -130,7 +129,7 @@ function getDayOfWeek(): number {
   return brazilTime.getUTCDay()
 }
 
-// Check if store is open from settings table (manual control ONLY - v2)
+// Check if store is open from settings table (manual control ONLY)
 async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: string }> {
   const { data: settings, error } = await supabase
     .from('settings')
@@ -142,11 +141,9 @@ async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: st
 
   if (error) {
     console.error('Error checking store status:', error)
-    // Default to open if can't check settings (so admin can fix)
     return { open: true }
   }
 
-  // If no settings row exists or is_open is null, default to OPEN (admin controls manually)
   if (!settings || settings.is_open === null || settings.is_open === undefined) {
     console.log('No is_open setting found, defaulting to OPEN')
     return { open: true }
@@ -164,16 +161,14 @@ async function isStoreOpen(supabase: any): Promise<{ open: boolean; message?: st
   return { open: true }
 }
 
-// Category-specific time rules (optional warnings, not blocking)
+// Category-specific time rules
 function isCategoryAvailable(categoryName: string): { available: boolean; message?: string } {
   const currentHour = getCurrentHour()
 
-  // Lanches: only until 10h
   if (categoryName === 'Lanches' && currentHour >= 10) {
     return { available: false, message: 'Lanches disponíveis somente até 10h' }
   }
 
-  // Almoço: only from 11h
   if (categoryName === 'Almoço' && currentHour < 11) {
     return { available: false, message: 'Almoço disponível a partir das 11h' }
   }
@@ -189,32 +184,37 @@ interface OrderItemExtra {
 }
 
 interface OrderItem {
-  item_id: string
+  item_id: string | null
   quantity: number
   price?: number
   tapioca_molhada?: boolean
-  extras?: OrderItemExtra[]
+  extras?: OrderItemExtra[] | {
+    type: 'lunch'
+    base: { id?: string; name: string; price: number }
+    meats?: string[]
+    extraMeats?: string[]
+    sides?: string[]
+    regularExtras?: { name?: string; price?: number }[]
+  }
 }
 
-// Support both formats: nested object OR separate fields (for Sofia AI compatibility)
 interface CreateOrderBody {
   customer_name: string
   customer_phone?: string
   order_type: 'local' | 'retirada' | 'entrega'
-  // Nested address format (original)
   address?: string | {
     street?: string
     bairro?: string
     cep?: string
     reference?: string
   }
-  // Flat address fields (Sofia AI format)
   bairro?: string
   cep?: string
   reference?: string
   scheduled_for?: string
   items: OrderItem[]
   payment_method?: string
+  troco?: number | null
 }
 
 Deno.serve(async (req) => {
@@ -232,7 +232,6 @@ Deno.serve(async (req) => {
 
     // GET - Fetch order by ID or list all orders (REQUIRES ADMIN/STAFF AUTH)
     if (req.method === 'GET') {
-      // Verify authentication and role
       const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
       if (authError) {
         return new Response(
@@ -244,7 +243,6 @@ Deno.serve(async (req) => {
       const orderId = url.searchParams.get('id')
       
       if (!orderId) {
-        // List all orders (for admin/staff)
         const { data, error } = await supabase
           .from('orders')
           .select(`
@@ -319,7 +317,7 @@ Deno.serve(async (req) => {
       // Try to get user_id from body OR from auth token
       let userId: string | null = body.user_id || null
       
-      // Prefer authenticated user_id from JWT (prevents missing/forged user_id)
+      // Prefer authenticated user_id from JWT
       const authHeader = req.headers.get('Authorization')
       if (authHeader) {
         try {
@@ -349,37 +347,31 @@ Deno.serve(async (req) => {
       
       console.log('Final user_id for order:', userId)
 
-      // Normalize address: support both flat fields (Sofia) and nested object (original)
-      // Extract bairro from flat field or nested address object
+      // Normalize address fields
       let bairro: string | undefined
       let cep: string | undefined
       let reference: string | undefined
       let addressStr: string | undefined
 
-      // Priority: flat bairro field > nested address.bairro
       if (body.bairro) {
-        // Flat fields (Sofia AI or CustomerPedido format)
         bairro = body.bairro
         cep = body.cep ?? undefined
         reference = body.reference ?? undefined
-        // Get street from nested object if address is object, otherwise from string
         if (body.address && typeof body.address === 'object') {
           addressStr = body.address.street
         } else if (typeof body.address === 'string') {
           addressStr = body.address
         }
       } else if (body.address && typeof body.address === 'object') {
-        // Only nested object (original format without flat fields)
         bairro = body.address.bairro
         cep = body.address.cep
         reference = body.address.reference
         addressStr = body.address.street
       } else if (typeof body.address === 'string') {
-        // Just a string address, no bairro (legacy fallback)
         addressStr = body.address
       }
 
-      // RULE 1: Check if store is open (manual control via settings)
+      // RULE 1: Check if store is open
       const skipHoursCheck = url.searchParams.get('skip_hours_check') === 'true'
       if (!skipHoursCheck) {
         const storeStatus = await isStoreOpen(supabase)
@@ -409,9 +401,12 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Fetch all items from DB to validate and get prices (filter out null item_ids for lunch items)
-      const itemIds = body.items.map(i => i.item_id).filter((id): id is string => id !== null)
-      const { data: dbItems, error: itemsError } = itemIds.length > 0 
+      // Fetch all items from DB (filter out null item_ids for lunch items)
+      const itemIds = body.items
+        .map(i => i.item_id)
+        .filter((id): id is string => id !== null)
+
+      const { data: dbItems, error: itemsError } = itemIds.length > 0
         ? await supabase
             .from('items')
             .select('*, category:categories(name)')
@@ -458,21 +453,21 @@ Deno.serve(async (req) => {
       // Calculate totals for each item
       let subtotal = 0
       let extrasTotal = 0
-      const orderItemsData = []
+      const orderItemsData: any[] = []
 
       for (const orderItem of body.items) {
         const quantity = orderItem.quantity || 1
-        
+
         // Check if this is a lunch item (item_id is null and extras is lunch object)
-        const isLunchItem = orderItem.item_id === null && 
-          orderItem.extras && 
-          typeof orderItem.extras === 'object' && 
+        const isLunchItem =
+          orderItem.item_id === null &&
+          orderItem.extras &&
+          typeof orderItem.extras === 'object' &&
           !Array.isArray(orderItem.extras) &&
           (orderItem.extras as any).type === 'lunch'
-        
+
         if (isLunchItem) {
-          // Handle lunch item
-          const lunchExtras = orderItem.extras as { 
+          const lunchExtras = orderItem.extras as {
             type: 'lunch'
             base: { id?: string; name: string; price: number }
             meats?: string[]
@@ -480,31 +475,31 @@ Deno.serve(async (req) => {
             sides?: string[]
             regularExtras?: { name?: string; price?: number }[]
           }
-          
+
           let lunchPrice = Number(lunchExtras.base.price)
           let lunchExtrasPrice = 0
-          
+
           // Add extra meats price (+R$6 each)
           if (lunchExtras.extraMeats && lunchExtras.extraMeats.length > 0) {
             lunchExtrasPrice = lunchExtras.extraMeats.length * 6.0
           }
-          
+
           const totalLunchPrice = (lunchPrice + lunchExtrasPrice) * quantity
           subtotal += totalLunchPrice
           extrasTotal += lunchExtrasPrice * quantity
-          
+
           orderItemsData.push({
-            item_id: null, // lunch items don't have item_id
+            item_id: null,
             quantity,
-            extras: lunchExtras, // Store the full lunch object
+            extras: lunchExtras,
             tapioca_molhada: false,
             price: lunchPrice + lunchExtrasPrice,
           })
-          
+
           console.log(`Added lunch item: ${lunchExtras.base.name}, price: ${lunchPrice}, extras: ${lunchExtrasPrice}`)
           continue
         }
-        
+
         // Regular item processing
         const dbItem = dbItems?.find(i => i.id === orderItem.item_id)
         if (!dbItem) {
@@ -526,15 +521,12 @@ Deno.serve(async (req) => {
           console.log(`Applied tapioca molhada to ${dbItem.name}: +R$1.00`)
         }
 
-        // RULE 5: Apply extras - Support both formats:
-        // Old: {code: string} - look up in DB
-        // Sofia: {id?: string, name?: string, price?: number} - can use provided price or look up
+        // RULE 5: Apply extras
         const extrasArray = Array.isArray(orderItem.extras) ? orderItem.extras : []
         if (extrasArray.length > 0 && dbItem.allow_extras) {
           const categoryName = dbItem.category?.name || ''
           
           for (const extra of extrasArray) {
-            // Determine the extra identifier (code, name, or id)
             const extraCode = extra.code || extra.name || extra.id
 
             // If Sofia provided name and price directly, use them
@@ -552,7 +544,6 @@ Deno.serve(async (req) => {
               e.code === extraCode || e.name === extraCode || e.id === extraCode
             )
             if (globalExtra) {
-              // Check if extra applies to this category
               if (!globalExtra.applies_to_category || globalExtra.applies_to_category === categoryName) {
                 itemExtrasPrice += Number(globalExtra.price)
                 appliedExtras.push({ name: globalExtra.name, price: Number(globalExtra.price) })
@@ -626,14 +617,6 @@ Deno.serve(async (req) => {
 
       console.log(`Order totals - Subtotal: R$${subtotal}, Extras: R$${extrasTotal}, Delivery: R$${deliveryFee}, Total: R$${total}`)
 
-      // Build address object for storage
-      const addressData = bairro ? {
-        street: addressStr,
-        bairro,
-        cep,
-        reference
-      } : null
-
       // Create order
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -653,7 +636,7 @@ Deno.serve(async (req) => {
           status: 'pending',
           payment_method: body.payment_method || null,
           troco: body.troco || null,
-          user_id: userId // Link order to authenticated user for customer visibility
+          user_id: userId
         })
         .select()
         .single()
@@ -719,7 +702,6 @@ Deno.serve(async (req) => {
 
     // PATCH - Update order status (REQUIRES ADMIN/STAFF AUTH)
     if (req.method === 'PATCH') {
-      // Verify authentication and role
       const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
       if (authError) {
         return new Response(
@@ -772,7 +754,6 @@ Deno.serve(async (req) => {
 
     // DELETE - Cancel order (REQUIRES ADMIN/STAFF AUTH + within 10 min window)
     if (req.method === 'DELETE') {
-      // Verify authentication and role
       const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
       if (authError) {
         return new Response(
