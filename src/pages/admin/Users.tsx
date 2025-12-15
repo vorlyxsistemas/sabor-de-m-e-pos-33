@@ -25,10 +25,20 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, Pencil, Trash2 } from "lucide-react";
 import { z } from "zod";
 
 interface UserWithRole {
@@ -48,15 +58,29 @@ const createUserSchema = z.object({
   role: z.enum(['admin', 'staff', 'customer']),
 });
 
+const editUserSchema = z.object({
+  name: z.string().trim().min(2, 'Nome deve ter no mínimo 2 caracteres'),
+  phone: z.string().optional(),
+  role: z.enum(['admin', 'staff', 'customer']),
+});
+
 const Users = () => {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    name: '',
+    phone: '',
+    role: 'staff' as 'admin' | 'staff' | 'customer',
+  });
+  const [editFormData, setEditFormData] = useState({
     name: '',
     phone: '',
     role: 'staff' as 'admin' | 'staff' | 'customer',
@@ -90,7 +114,7 @@ const Users = () => {
 
       const usersWithRoles: UserWithRole[] = profiles?.map(p => ({
         id: p.id,
-        email: '', // We don't have email access from profiles
+        email: '',
         name: p.name,
         phone: p.phone,
         role: roleMap[p.id] || 'customer',
@@ -116,6 +140,21 @@ const Users = () => {
     setDialogOpen(true);
   };
 
+  const openEditDialog = (user: UserWithRole) => {
+    setSelectedUser(user);
+    setEditFormData({
+      name: user.name || '',
+      phone: user.phone || '',
+      role: user.role as 'admin' | 'staff' | 'customer',
+    });
+    setEditDialogOpen(true);
+  };
+
+  const openDeleteDialog = (user: UserWithRole) => {
+    setSelectedUser(user);
+    setDeleteDialogOpen(true);
+  };
+
   const handleCreateUser = async () => {
     const validation = createUserSchema.safeParse(formData);
     if (!validation.success) {
@@ -129,7 +168,6 @@ const Users = () => {
 
     setSaving(true);
     try {
-      // Use edge function to create user without affecting current session
       const { data, error } = await supabase.functions.invoke('create-user', {
         body: {
           email: formData.email,
@@ -168,16 +206,38 @@ const Users = () => {
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: 'admin' | 'staff' | 'customer') => {
+  const handleEditUser = async () => {
+    if (!selectedUser) return;
+
+    const validation = editUserSchema.safeParse(editFormData);
+    if (!validation.success) {
+      toast({
+        title: "Erro de validação",
+        description: validation.error.errors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
     try {
-      const { error } = await supabase
-        .from('user_roles')
-        .update({ role: newRole as any })
-        .eq('user_id', userId);
+      const { data, error } = await supabase.functions.invoke('update-user', {
+        body: {
+          user_id: selectedUser.id,
+          name: editFormData.name,
+          phone: editFormData.phone,
+          role: editFormData.role,
+        },
+      });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      toast({ title: "Permissão atualizada!" });
+      toast({
+        title: "Usuário atualizado!",
+        description: "Dados salvos com sucesso.",
+      });
+      setEditDialogOpen(false);
       fetchUsers();
     } catch (error: any) {
       toast({
@@ -185,6 +245,37 @@ const Users = () => {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: selectedUser.id },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Usuário excluído!",
+        description: "Usuário removido com sucesso.",
+      });
+      setDeleteDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -221,12 +312,13 @@ const Users = () => {
                 <TableHead>Telefone</TableHead>
                 <TableHead>Permissão</TableHead>
                 <TableHead>Criado em</TableHead>
+                <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Nenhum usuário cadastrado
                   </TableCell>
                 </TableRow>
@@ -235,23 +327,28 @@ const Users = () => {
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name || '-'}</TableCell>
                     <TableCell>{user.phone || '-'}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={user.role}
-                        onValueChange={(value) => updateUserRole(user.id, value as 'admin' | 'staff' | 'customer')}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="staff">Staff</SelectItem>
-                          <SelectItem value="customer">Cliente</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
+                    <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(user.created_at).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(user)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openDeleteDialog(user)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -261,6 +358,7 @@ const Users = () => {
         </div>
       )}
 
+      {/* Create User Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -328,6 +426,81 @@ const Users = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                placeholder="Nome completo"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone (opcional)</Label>
+              <Input
+                type="tel"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                placeholder="(00) 00000-0000"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Permissão</Label>
+              <Select
+                value={editFormData.role}
+                onValueChange={(v) => setEditFormData({ ...editFormData, role: v as 'admin' | 'staff' | 'customer' })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
+                  <SelectItem value="customer">Cliente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleEditUser} disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o usuário "{selectedUser?.name}"? 
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={saving}
+            >
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };
