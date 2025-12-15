@@ -42,15 +42,21 @@ const CustomerMeusPedidos = () => {
   const fetchOrders = async () => {
     if (!user) return;
     
-    // Rely on RLS to only return orders of the authenticated customer
+    console.log('Fetching orders for user:', user.id);
+    
+    // Filter orders by user_id to only show orders made by this customer
+    // @ts-ignore - Supabase types issue with complex queries
     const { data, error } = await supabase
       .from('orders')
       .select('id, customer_name, order_type, status, subtotal, delivery_tax, total, address, created_at, order_items(id, quantity, price, extras, items(name))')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20);
 
+    console.log('Orders fetched:', data, 'Error:', error);
+
     if (!error && data) {
-      setOrders(data as unknown as Order[]);
+      setOrders(data as Order[]);
     }
     setLoading(false);
   };
