@@ -345,8 +345,8 @@ Deno.serve(async (req) => {
       if (body.bairro) {
         // Flat fields (Sofia AI or CustomerPedido format)
         bairro = body.bairro
-        cep = body.cep
-        reference = body.reference
+        cep = body.cep ?? undefined
+        reference = body.reference ?? undefined
         // Get street from nested object if address is object, otherwise from string
         if (body.address && typeof body.address === 'object') {
           addressStr = body.address.street
