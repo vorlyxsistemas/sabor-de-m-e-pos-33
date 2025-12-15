@@ -42,7 +42,6 @@ interface Order {
   scheduled_for: string | null;
   payment_method: string | null;
   troco: number | null;
-  archived: boolean;
   order_items: OrderItem[];
 }
 
@@ -89,7 +88,7 @@ const Kanban = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // @ts-ignore - bairro/payment_method/troco/archived columns exist but types are not updated
+      // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
       const { data, error } = await (supabase as any)
         .from("orders")
         .select(`
@@ -110,7 +109,6 @@ const Kanban = () => {
           scheduled_for,
           payment_method,
           troco,
-          archived,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
         `)
         .gte("created_at", today.toISOString())
@@ -119,15 +117,9 @@ const Kanban = () => {
 
       if (error) throw error;
       
-      // Check if archived column exists by checking for it in data
-      const allOrders = ((data || []) as any[]).map(o => ({
-        ...o,
-        archived: o.archived ?? false
-      })) as Order[];
-      
-      // Filter active vs archived
-      setOrders(allOrders.filter(o => !o.archived));
-      setArchivedOrders(allOrders.filter(o => o.archived));
+      const allOrders = ((data || []) as Order[]);
+      setOrders(allOrders);
+      setArchivedOrders([]); // Archive feature disabled until column is added
     } catch (error) {
       console.error("Erro ao buscar pedidos:", error);
       toast({
@@ -175,7 +167,7 @@ const Kanban = () => {
           });
           const shouldPrint = settings?.auto_print_enabled || false;
           
-          // @ts-ignore - bairro/payment_method/troco/archived columns exist but types are not updated
+          // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
           const { data: newOrder } = await (supabase as any)
             .from("orders")
             .select(`
@@ -196,15 +188,13 @@ const Kanban = () => {
               scheduled_for,
               payment_method,
               troco,
-              archived,
               order_items(quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)
             .single();
           
           if (newOrder && (newOrder as any).status === "pending") {
-            const orderWithArchived = { ...(newOrder as any), archived: false } as Order;
-            autoPrintPendingOrders([orderWithArchived], shouldPrint);
+            autoPrintPendingOrders([newOrder as Order], shouldPrint);
           }
           fetchOrders();
         }
@@ -257,47 +247,19 @@ const Kanban = () => {
   };
 
   const archiveOrder = async (orderId: string) => {
-    try {
-      // Note: archived column added via migration
-      const { error } = await supabase
-        .from("orders")
-        .update({ archived: true } as any)
-        .eq("id", orderId);
-
-      if (error) throw error;
-
-      toast({ title: "Pedido arquivado!" });
-      fetchOrders();
-    } catch (error: any) {
-      console.error("Erro ao arquivar:", error);
-      toast({
-        title: "Erro ao arquivar",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Função indisponível",
+      description: "A coluna 'archived' precisa ser adicionada ao banco de dados.",
+      variant: "destructive",
+    });
   };
 
   const unarchiveOrder = async (orderId: string) => {
-    try {
-      // Note: archived column added via migration
-      const { error } = await supabase
-        .from("orders")
-        .update({ archived: false } as any)
-        .eq("id", orderId);
-
-      if (error) throw error;
-
-      toast({ title: "Pedido restaurado!" });
-      fetchOrders();
-    } catch (error: any) {
-      console.error("Erro ao restaurar:", error);
-      toast({
-        title: "Erro ao restaurar",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "Função indisponível",
+      description: "A coluna 'archived' precisa ser adicionada ao banco de dados.",
+      variant: "destructive",
+    });
   };
 
   const handleViewDetails = (order: Order) => {
