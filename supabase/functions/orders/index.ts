@@ -18,12 +18,26 @@ const extraSchema = z.object({
   message: 'Extra deve ter code, id ou name',
 })
 
+// Schema for lunch item extras (object format)
+const lunchExtrasSchema = z.object({
+  type: z.literal('lunch'),
+  base: z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    price: z.number(),
+  }),
+  meats: z.array(z.string()).optional(),
+  extraMeats: z.array(z.string()).optional(),
+  sides: z.array(z.string()).optional(),
+  regularExtras: z.array(extraSchema).optional(),
+})
+
 const orderItemInputSchema = z.object({
-  item_id: uuidSchema,
+  item_id: z.union([uuidSchema, z.null()]), // null for lunch items
   quantity: z.number().int().min(1).max(50),
   price: z.number().min(0).max(9999.99).optional(),
   tapioca_molhada: z.boolean().optional().default(false),
-  extras: z.array(extraSchema).optional().default([]),
+  extras: z.union([z.array(extraSchema), lunchExtrasSchema]).optional().default([]), // array OR lunch object
 })
 
 const addressObjectSchema = z.object({
@@ -51,6 +65,7 @@ const createOrderBodySchema = z.object({
   scheduled_for: z.union([z.string().max(30), z.null()]).optional(),
   items: z.array(orderItemInputSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
   payment_method: z.union([z.string().max(50), z.null()]).optional(),
+  troco: z.union([z.number().min(0).max(9999.99), z.null()]).optional(),
   user_id: z.string().uuid().nullable().optional(), // Link to authenticated user
 })
 
@@ -394,12 +409,14 @@ Deno.serve(async (req) => {
         )
       }
 
-      // Fetch all items from DB to validate and get prices
-      const itemIds = body.items.map(i => i.item_id)
-      const { data: dbItems, error: itemsError } = await supabase
-        .from('items')
-        .select('*, category:categories(name)')
-        .in('id', itemIds)
+      // Fetch all items from DB to validate and get prices (filter out null item_ids for lunch items)
+      const itemIds = body.items.map(i => i.item_id).filter((id): id is string => id !== null)
+      const { data: dbItems, error: itemsError } = itemIds.length > 0 
+        ? await supabase
+            .from('items')
+            .select('*, category:categories(name)')
+            .in('id', itemIds)
+        : { data: [], error: null }
 
       if (itemsError) throw itemsError
 
@@ -444,6 +461,51 @@ Deno.serve(async (req) => {
       const orderItemsData = []
 
       for (const orderItem of body.items) {
+        const quantity = orderItem.quantity || 1
+        
+        // Check if this is a lunch item (item_id is null and extras is lunch object)
+        const isLunchItem = orderItem.item_id === null && 
+          orderItem.extras && 
+          typeof orderItem.extras === 'object' && 
+          !Array.isArray(orderItem.extras) &&
+          (orderItem.extras as any).type === 'lunch'
+        
+        if (isLunchItem) {
+          // Handle lunch item
+          const lunchExtras = orderItem.extras as { 
+            type: 'lunch'
+            base: { id?: string; name: string; price: number }
+            meats?: string[]
+            extraMeats?: string[]
+            sides?: string[]
+            regularExtras?: { name?: string; price?: number }[]
+          }
+          
+          let lunchPrice = Number(lunchExtras.base.price)
+          let lunchExtrasPrice = 0
+          
+          // Add extra meats price (+R$6 each)
+          if (lunchExtras.extraMeats && lunchExtras.extraMeats.length > 0) {
+            lunchExtrasPrice = lunchExtras.extraMeats.length * 6.0
+          }
+          
+          const totalLunchPrice = (lunchPrice + lunchExtrasPrice) * quantity
+          subtotal += totalLunchPrice
+          extrasTotal += lunchExtrasPrice * quantity
+          
+          orderItemsData.push({
+            item_id: null, // lunch items don't have item_id
+            quantity,
+            extras: lunchExtras, // Store the full lunch object
+            tapioca_molhada: false,
+            price: lunchPrice + lunchExtrasPrice,
+          })
+          
+          console.log(`Added lunch item: ${lunchExtras.base.name}, price: ${lunchPrice}, extras: ${lunchExtrasPrice}`)
+          continue
+        }
+        
+        // Regular item processing
         const dbItem = dbItems?.find(i => i.id === orderItem.item_id)
         if (!dbItem) {
           return new Response(
@@ -452,7 +514,6 @@ Deno.serve(async (req) => {
           )
         }
 
-        const quantity = orderItem.quantity || 1
         let itemPrice = Number(dbItem.price)
         let itemExtrasPrice = 0
         const appliedExtras: { name: string; price: number }[] = []
@@ -468,10 +529,11 @@ Deno.serve(async (req) => {
         // RULE 5: Apply extras - Support both formats:
         // Old: {code: string} - look up in DB
         // Sofia: {id?: string, name?: string, price?: number} - can use provided price or look up
-        if (orderItem.extras && orderItem.extras.length > 0 && dbItem.allow_extras) {
+        const extrasArray = Array.isArray(orderItem.extras) ? orderItem.extras : []
+        if (extrasArray.length > 0 && dbItem.allow_extras) {
           const categoryName = dbItem.category?.name || ''
           
-          for (const extra of orderItem.extras) {
+          for (const extra of extrasArray) {
             // Determine the extra identifier (code, name, or id)
             const extraCode = extra.code || extra.name || extra.id
 
@@ -589,6 +651,8 @@ Deno.serve(async (req) => {
           subtotal: subtotal,
           total: total,
           status: 'pending',
+          payment_method: body.payment_method || null,
+          troco: body.troco || null,
           user_id: userId // Link order to authenticated user for customer visibility
         })
         .select()
