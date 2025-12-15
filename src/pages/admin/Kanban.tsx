@@ -89,7 +89,8 @@ const Kanban = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data, error } = await supabase
+      // @ts-ignore - bairro/payment_method/troco/archived columns exist but types are not updated
+      const { data, error } = await (supabase as any)
         .from("orders")
         .select(`
           id,
@@ -174,7 +175,8 @@ const Kanban = () => {
           });
           const shouldPrint = settings?.auto_print_enabled || false;
           
-          const { data: newOrder } = await supabase
+          // @ts-ignore - bairro/payment_method/troco/archived columns exist but types are not updated
+          const { data: newOrder } = await (supabase as any)
             .from("orders")
             .select(`
               id,
@@ -201,7 +203,8 @@ const Kanban = () => {
             .single();
           
           if (newOrder && (newOrder as any).status === "pending") {
-            autoPrintPendingOrders([{ ...newOrder, archived: false } as Order], shouldPrint);
+            const orderWithArchived = { ...(newOrder as any), archived: false } as Order;
+            autoPrintPendingOrders([orderWithArchived], shouldPrint);
           }
           fetchOrders();
         }
