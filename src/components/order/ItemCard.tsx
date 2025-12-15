@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Plus, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Extra {
@@ -25,18 +26,21 @@ interface ItemCardProps {
     allow_extras?: boolean;
     category_id?: string;
     image_url?: string | null;
+    requires_variation?: boolean;
+    variation_options?: string[] | null;
   };
   categoryName?: string;
-  onAddToCart: (item: any, extras: Extra[], tapiocaMolhada: boolean) => void;
+  onAddToCart: (item: any, extras: Extra[], tapiocaMolhada: boolean, selectedVariation?: string) => void;
 }
 
 // Categories that should NOT show extras
-const CATEGORIES_WITHOUT_EXTRAS = ["bebidas", "porções", "porcoes", "sucos", "refrigerantes"];
+const CATEGORIES_WITHOUT_EXTRAS = ["bebidas", "porções", "porcoes", "sucos", "refrigerantes", "caldos"];
 
 export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps) {
   const [selectedExtras, setSelectedExtras] = useState<Extra[]>([]);
   const [tapiocaMolhada, setTapiocaMolhada] = useState(false);
   const [availableExtras, setAvailableExtras] = useState<Extra[]>([]);
+  const [selectedVariation, setSelectedVariation] = useState<string>("");
 
   const isTapioca = item.name.toLowerCase().includes("tapioca");
   const canBeMolhada = isTapioca && !item.is_molhado_by_default;
@@ -46,12 +50,20 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
   const isExcludedCategory = CATEGORIES_WITHOUT_EXTRAS.some(cat => categoryLower.includes(cat));
   const canHaveExtras = item.allow_extras !== false && !isExcludedCategory;
 
+  // Check if item requires variation selection (like "1/2 caldo")
+  const requiresVariation = item.requires_variation && item.variation_options && item.variation_options.length > 0;
+
   // Fetch available extras for this item's category
   useEffect(() => {
     if (canHaveExtras) {
       fetchExtras();
     }
   }, [categoryName, canHaveExtras]);
+
+  // Reset variation when item changes
+  useEffect(() => {
+    setSelectedVariation("");
+  }, [item.id]);
 
   const fetchExtras = async () => {
     const { data } = await supabase
@@ -81,15 +93,23 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
   };
 
   const handleAddToCart = () => {
-    onAddToCart(item, selectedExtras, tapiocaMolhada);
+    // If variation is required but not selected, show error
+    if (requiresVariation && !selectedVariation) {
+      return;
+    }
+    
+    onAddToCart(item, selectedExtras, tapiocaMolhada, selectedVariation || undefined);
     // Reset selections
     setSelectedExtras([]);
     setTapiocaMolhada(false);
+    setSelectedVariation("");
   };
 
   const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
   const molhadaPrice = tapiocaMolhada ? 1 : 0;
   const totalPrice = Number(item.price) + extrasTotal + molhadaPrice;
+
+  const canAdd = !requiresVariation || selectedVariation;
 
   return (
     <Card className="shadow-sm overflow-hidden">
@@ -111,6 +131,26 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
       <CardContent className="py-2 px-4 space-y-3">
         {item.description && (
           <p className="text-xs text-muted-foreground">{item.description}</p>
+        )}
+
+        {/* Variation Selection (e.g., for "1/2 caldo") */}
+        {requiresVariation && (
+          <div className="space-y-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
+            <p className="text-xs font-medium flex items-center gap-1">
+              <AlertCircle className="h-3 w-3 text-amber-600" />
+              Escolha o tipo:
+            </p>
+            <RadioGroup value={selectedVariation} onValueChange={setSelectedVariation}>
+              {item.variation_options?.map((option) => (
+                <div key={option} className="flex items-center space-x-2">
+                  <RadioGroupItem value={option} id={`var-${item.id}-${option}`} />
+                  <Label htmlFor={`var-${item.id}-${option}`} className="text-xs cursor-pointer">
+                    {option}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </div>
         )}
 
         {/* Tapioca Molhada Option */}
@@ -162,8 +202,14 @@ export function ItemCard({ item, categoryName = "", onAddToCart }: ItemCardProps
           </div>
         )}
 
-        <Button size="sm" onClick={handleAddToCart} className="w-full">
-          <Plus className="h-4 w-4 mr-1" /> Adicionar
+        <Button 
+          size="sm" 
+          onClick={handleAddToCart} 
+          className="w-full"
+          disabled={!canAdd}
+        >
+          <Plus className="h-4 w-4 mr-1" /> 
+          {requiresVariation && !selectedVariation ? "Selecione o tipo" : "Adicionar"}
         </Button>
       </CardContent>
     </Card>

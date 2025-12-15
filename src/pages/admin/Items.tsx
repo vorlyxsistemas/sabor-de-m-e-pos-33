@@ -56,6 +56,8 @@ interface Item {
   available: boolean;
   image_url: string | null;
   is_grilled_meat: boolean;
+  requires_variation: boolean;
+  variation_options: string[] | null;
   extras?: Extra[];
 }
 
@@ -70,6 +72,8 @@ const defaultItem: Omit<Item, 'id'> = {
   available: true,
   image_url: null,
   is_grilled_meat: false,
+  requires_variation: false,
+  variation_options: null,
   extras: [],
 };
 
@@ -86,6 +90,7 @@ const Items = () => {
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [formData, setFormData] = useState<Omit<Item, 'id'>>(defaultItem);
   const [newExtra, setNewExtra] = useState({ name: '', price: 0 });
+  const [newVariationOption, setNewVariationOption] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -147,6 +152,8 @@ const Items = () => {
       available: item.available,
       image_url: item.image_url,
       is_grilled_meat: item.is_grilled_meat || false,
+      requires_variation: item.requires_variation || false,
+      variation_options: item.variation_options || null,
       extras: item.extras || [],
     });
     setPreviewUrl(item.image_url);
@@ -220,6 +227,10 @@ const Items = () => {
         available: formData.available,
         image_url: formData.image_url,
         is_grilled_meat: formData.is_grilled_meat,
+        requires_variation: formData.requires_variation,
+        variation_options: formData.requires_variation && formData.variation_options?.length 
+          ? formData.variation_options 
+          : null,
       };
 
       let itemId: string;
@@ -561,7 +572,66 @@ const Items = () => {
                   onCheckedChange={(v) => setFormData({ ...formData, is_grilled_meat: v })}
                 />
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Requer seleção de variação</span>
+                <Switch
+                  checked={formData.requires_variation}
+                  onCheckedChange={(v) => setFormData({ ...formData, requires_variation: v, variation_options: v ? (formData.variation_options || []) : null })}
+                />
+              </div>
             </div>
+
+            {/* Variation Options */}
+            {formData.requires_variation && (
+              <Card className="border-amber-200 dark:border-amber-800">
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <span className="text-amber-600">🔀</span> Opções de Variação
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    O cliente será obrigado a escolher uma das opções abaixo antes de adicionar ao carrinho.
+                  </p>
+                  {formData.variation_options?.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Badge variant="secondary" className="flex-1 justify-between">
+                        {option}
+                        <X
+                          className="h-3 w-3 ml-2 cursor-pointer"
+                          onClick={() => {
+                            const newOptions = formData.variation_options?.filter((_, i) => i !== index) || [];
+                            setFormData({ ...formData, variation_options: newOptions });
+                          }}
+                        />
+                      </Badge>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ex: Caldo de mocotó"
+                      value={newVariationOption}
+                      onChange={(e) => setNewVariationOption(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        if (newVariationOption.trim()) {
+                          setFormData({
+                            ...formData,
+                            variation_options: [...(formData.variation_options || []), newVariationOption.trim()]
+                          });
+                          setNewVariationOption('');
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {formData.allow_extras && (
               <Card>

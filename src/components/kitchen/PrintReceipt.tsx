@@ -161,6 +161,13 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                   <span>R${item.price.toFixed(2)}</span>
                 </div>
                 
+                {/* Selected Variation (e.g., type of broth) */}
+                {!isLunch && extras?.selected_variation && (
+                  <div className="pl-2 text-xs font-bold">
+                    TIPO: {extras.selected_variation.toUpperCase()}
+                  </div>
+                )}
+                
                 {/* Lunch Details */}
                 {isLunch && (
                   <div className="pl-2 text-xs">
