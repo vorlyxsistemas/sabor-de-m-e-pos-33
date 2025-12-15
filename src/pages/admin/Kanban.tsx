@@ -31,6 +31,7 @@ interface Order {
   status: OrderStatus;
   order_type: string;
   address: string | null;
+  bairro: string | null;
   cep: string | null;
   reference: string | null;
   subtotal: number;
@@ -39,6 +40,8 @@ interface Order {
   total: number;
   created_at: string;
   scheduled_for: string | null;
+  payment_method: string | null;
+  troco: number | null;
   archived: boolean;
   order_items: OrderItem[];
 }

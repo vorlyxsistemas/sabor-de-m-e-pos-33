@@ -1,9 +1,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Printer, MapPin, Phone, User, Clock } from "lucide-react";
+import { Printer, MapPin, Phone, User, Clock, CreditCard, Copy, Check } from "lucide-react";
 import { format } from "date-fns";
 import { printReceipt } from "@/lib/printReceipt";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface OrderItem {
   quantity: number;
@@ -20,6 +22,7 @@ interface Order {
   status: string;
   order_type: string;
   address: string | null;
+  bairro: string | null;
   cep: string | null;
   reference: string | null;
   subtotal: number;
@@ -28,6 +31,8 @@ interface Order {
   total: number;
   created_at: string;
   scheduled_for: string | null;
+  payment_method: string | null;
+  troco: number | null;
   order_items: OrderItem[];
 }
 
@@ -44,13 +49,38 @@ const orderTypeLabels: Record<string, string> = {
   entrega: "Entrega",
 };
 
+const paymentMethodLabels: Record<string, string> = {
+  pix: "PIX",
+  dinheiro: "Dinheiro",
+  cartao: "Cartão",
+};
+
+// PIX info
+const PIX_KEY = "88982207599";
+const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
+
 export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetailsModalProps) {
+  const [copiedPix, setCopiedPix] = useState(false);
+  const { toast } = useToast();
+
   if (!order) return null;
 
   const orderNumber = order.id.slice(-6).toUpperCase();
+  const paymentLabel = paymentMethodLabels[order.payment_method || ""] || order.payment_method || "Não informado";
 
   const handlePrint = () => {
     printReceipt(order);
+  };
+
+  const handleCopyPix = async () => {
+    try {
+      await navigator.clipboard.writeText(PIX_KEY);
+      setCopiedPix(true);
+      toast({ title: "Chave PIX copiada!" });
+      setTimeout(() => setCopiedPix(false), 2000);
+    } catch {
+      toast({ title: "Erro ao copiar", variant: "destructive" });
+    }
   };
 
   return (
@@ -86,17 +116,42 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           </div>
 
           {/* Address (if delivery) */}
-          {order.order_type === "entrega" && order.address && (
+          {order.order_type === "entrega" && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <MapPin className="h-4 w-4" />
                 Endereço de Entrega
               </div>
-              <p className="text-sm text-muted-foreground">{order.address}</p>
+              {order.bairro && <p className="text-sm font-medium text-primary">Bairro: {order.bairro}</p>}
+              {order.address && <p className="text-sm text-muted-foreground">{order.address}</p>}
               {order.cep && <p className="text-sm text-muted-foreground">CEP: {order.cep}</p>}
-              {order.reference && <p className="text-sm text-muted-foreground">Ref: {order.reference}</p>}
+              {order.reference && <p className="text-sm font-medium">Referência: {order.reference}</p>}
             </div>
           )}
+
+          {/* Payment Info */}
+          <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <CreditCard className="h-4 w-4" />
+              Pagamento: {paymentLabel}
+            </div>
+            {order.payment_method === "dinheiro" && order.troco && (
+              <p className="text-sm font-medium text-orange-600">Troco para: R$ {order.troco.toFixed(2)}</p>
+            )}
+            {order.payment_method === "pix" && (
+              <div className="space-y-2 pt-1">
+                <p className="text-xs text-muted-foreground">Chave PIX (Telefone):</p>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
+                  <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
+                    {copiedPix ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copiedPix ? 'Copiado' : 'Copiar'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Favorecido: {PIX_OWNER}</p>
+              </div>
+            )}
+          </div>
 
           {/* Items */}
           <div className="space-y-2">
