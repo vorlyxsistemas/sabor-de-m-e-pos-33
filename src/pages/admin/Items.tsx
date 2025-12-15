@@ -55,6 +55,7 @@ interface Item {
   allow_tapioca_molhada: boolean;
   available: boolean;
   image_url: string | null;
+  is_grilled_meat: boolean;
   extras?: Extra[];
 }
 
@@ -68,6 +69,7 @@ const defaultItem: Omit<Item, 'id'> = {
   allow_tapioca_molhada: false,
   available: true,
   image_url: null,
+  is_grilled_meat: false,
   extras: [],
 };
 
@@ -144,6 +146,7 @@ const Items = () => {
       allow_tapioca_molhada: item.allow_tapioca_molhada,
       available: item.available,
       image_url: item.image_url,
+      is_grilled_meat: item.is_grilled_meat || false,
       extras: item.extras || [],
     });
     setPreviewUrl(item.image_url);
@@ -216,6 +219,7 @@ const Items = () => {
         allow_tapioca_molhada: formData.allow_tapioca_molhada,
         available: formData.available,
         image_url: formData.image_url,
+        is_grilled_meat: formData.is_grilled_meat,
       };
 
       let itemId: string;
@@ -548,6 +552,13 @@ const Items = () => {
                 <Switch
                   checked={formData.available}
                   onCheckedChange={(v) => setFormData({ ...formData, available: v })}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">É carne assada (almoço)</span>
+                <Switch
+                  checked={formData.is_grilled_meat}
+                  onCheckedChange={(v) => setFormData({ ...formData, is_grilled_meat: v })}
                 />
               </div>
             </div>
