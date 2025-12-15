@@ -92,7 +92,6 @@ const Users = () => {
 
   const fetchUsers = async () => {
     try {
-      // Get profiles with roles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -100,7 +99,6 @@ const Users = () => {
 
       if (profilesError) throw profilesError;
 
-      // Get roles for each profile
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
         .select('*');
@@ -221,7 +219,7 @@ const Users = () => {
 
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('update-user', {
+      const { data, error } = await supabase.functions.invoke('admin-users-update', {
         body: {
           user_id: selectedUser.id,
           name: editFormData.name,
@@ -255,7 +253,7 @@ const Users = () => {
 
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke('delete-user', {
+      const { data, error } = await supabase.functions.invoke('admin-users-remove', {
         body: { user_id: selectedUser.id },
       });
 
@@ -484,7 +482,7 @@ const Users = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o usuário "{selectedUser?.name}"? 
+              Tem certeza que deseja excluir o usuário "{selectedUser?.name}"?
               Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>

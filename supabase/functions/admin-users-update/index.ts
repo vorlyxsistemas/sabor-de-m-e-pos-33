@@ -5,9 +5,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
   try {
@@ -22,26 +33,16 @@ Deno.serve(async (req) => {
       }
     )
 
-    // Verify the requesting user is an admin
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Não autorizado' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    if (!authHeader) return jsonResponse({ error: 'Não autorizado' }, 401)
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user: requestingUser }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    
+
     if (authError || !requestingUser) {
-      return new Response(
-        JSON.stringify({ error: 'Token inválido' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: 'Token inválido' }, 401)
     }
 
-    // Check if requesting user is admin
     const { data: roleData } = await supabaseAdmin
       .from('user_roles')
       .select('role')
@@ -49,25 +50,27 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (roleData?.role !== 'admin') {
-      return new Response(
-        JSON.stringify({ error: 'Apenas administradores podem editar usuários' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: 'Apenas administradores podem editar usuários' }, 403)
     }
 
-    const body = await req.json()
+    const raw = await req.text()
+    if (!raw) return jsonResponse({ error: 'Body JSON é obrigatório' }, 400)
+
+    let body: any
+    try {
+      body = JSON.parse(raw)
+    } catch {
+      return jsonResponse({ error: 'Body inválido (JSON malformado)' }, 400)
+    }
+
     const { user_id, name, phone, role } = body
 
     if (!user_id) {
-      return new Response(
-        JSON.stringify({ error: 'ID do usuário é obrigatório' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: 'ID do usuário é obrigatório' }, 400)
     }
 
     console.log('Updating user:', user_id)
 
-    // Update profile
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .update({ name, phone })
@@ -75,13 +78,9 @@ Deno.serve(async (req) => {
 
     if (profileError) {
       console.error('Error updating profile:', profileError)
-      return new Response(
-        JSON.stringify({ error: profileError.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: profileError.message }, 400)
     }
 
-    // Update role
     if (role) {
       const { error: roleError } = await supabaseAdmin
         .from('user_roles')
@@ -90,21 +89,13 @@ Deno.serve(async (req) => {
 
       if (roleError) {
         console.error('Error updating role:', roleError)
+        // don't fail the whole request; profile already updated
       }
     }
 
-    console.log('User updated successfully')
-
-    return new Response(
-      JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-
+    return jsonResponse({ success: true })
   } catch (error: any) {
     console.error('Error:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({ error: error?.message ?? 'Erro desconhecido' }, 500)
   }
 })
