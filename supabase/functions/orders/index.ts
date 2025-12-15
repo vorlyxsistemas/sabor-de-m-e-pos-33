@@ -297,20 +297,31 @@ Deno.serve(async (req) => {
       // Try to get user_id from body OR from auth token
       let userId: string | null = body.user_id || null
       
-      // If user_id not in body, try to extract from auth header
-      if (!userId) {
-        const authHeader = req.headers.get('Authorization')
-        if (authHeader) {
-          try {
-            const token = authHeader.replace('Bearer ', '')
-            const { data: { user } } = await supabase.auth.getUser(token)
-            if (user) {
-              userId = user.id
-              console.log('Extracted user_id from auth token:', userId)
+      // Prefer authenticated user_id from JWT (prevents missing/forged user_id)
+      const authHeader = req.headers.get('Authorization')
+      if (authHeader) {
+        try {
+          const supabaseAuth = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+            {
+              global: { headers: { Authorization: authHeader } },
+              auth: { autoRefreshToken: false, persistSession: false },
             }
-          } catch (e) {
-            console.log('Could not extract user from token:', e)
+          )
+
+          const { data: { user }, error: authErr } = await supabaseAuth.auth.getUser()
+
+          if (authErr) {
+            console.log('Auth getUser error:', authErr)
           }
+
+          if (user) {
+            userId = user.id
+            console.log('Extracted user_id from auth token:', userId)
+          }
+        } catch (e) {
+          console.log('Could not extract user from token:', e)
         }
       }
       
