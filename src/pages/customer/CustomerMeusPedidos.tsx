@@ -27,7 +27,7 @@ interface Order {
     price: number;
     extras: any;
     tapioca_molhada: boolean;
-    items: { name: string } | null;
+    item: { name: string } | null;
   }[];
 }
 
@@ -52,7 +52,7 @@ const CustomerMeusPedidos = () => {
     // @ts-ignore - Supabase types issue with complex queries
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, customer_phone, order_type, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, order_items(id, quantity, price, extras, tapioca_molhada, items(name))')
+      .select('id, customer_name, customer_phone, order_type, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, order_items(id, quantity, price, extras, tapioca_molhada, item:items(name))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20) as any;
@@ -189,7 +189,7 @@ const CustomerMeusPedidos = () => {
                       return (
                         <div key={item.id || idx} className="flex justify-between items-start">
                           <div>
-                            <span className="font-medium">{item.quantity}x {item.items?.name || 'Item'}</span>
+                            <span className="font-medium">{item.quantity}x {item.item?.name || 'Item'}</span>
                             {item.tapioca_molhada && (
                               <Badge variant="secondary" className="ml-2 text-[10px]">Molhada</Badge>
                             )}
