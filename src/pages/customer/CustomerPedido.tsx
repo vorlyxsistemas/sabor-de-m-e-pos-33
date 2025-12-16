@@ -72,7 +72,8 @@ const CustomerPedido = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>("");
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<'local' | 'retirada' | 'entrega'>('local');
+  // Customers can only choose 'retirada' or 'entrega' - 'local' is disabled for customers
+  const [orderType, setOrderType] = useState<'local' | 'retirada' | 'entrega'>('retirada');
   const [customerName, setCustomerName] = useState(user?.user_metadata?.name || '');
   const [customerPhone, setCustomerPhone] = useState(user?.user_metadata?.phone || '');
   const [address, setAddress] = useState('');
@@ -506,14 +507,8 @@ const CustomerPedido = () => {
               </div>
               <div>
                 <Label className="text-xs font-medium">Tipo de Pedido *</Label>
-                <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="grid grid-cols-3 gap-2 mt-2">
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'local' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="local" id="local" className="sr-only" />
-                    <Label htmlFor="local" className="cursor-pointer text-center">
-                      <Store className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Local</span>
-                    </Label>
-                  </div>
+                {/* Customers can only choose Retirada or Entrega - Local is for staff/admin only */}
+                <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="grid grid-cols-2 gap-2 mt-2">
                   <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'retirada' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
                     <RadioGroupItem value="retirada" id="retirada" className="sr-only" />
                     <Label htmlFor="retirada" className="cursor-pointer text-center">
@@ -530,23 +525,6 @@ const CustomerPedido = () => {
                   </div>
                 </RadioGroup>
               </div>
-              {orderType === 'local' && (
-                <div>
-                  <Label className="text-xs">Número da Mesa</Label>
-                  <Select value={tableNumber} onValueChange={setTableNumber}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a mesa" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border shadow-lg z-50">
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <SelectItem key={i + 1} value={String(i + 1)}>
-                          Mesa {i + 1}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
               {orderType === 'entrega' && (
                 <>
                   <div>

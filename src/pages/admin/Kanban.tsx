@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Archive, ArchiveX } from "lucide-react";
 import { KanbanCard } from "@/components/kitchen/KanbanCard";
 import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
+import { EditOrderModal } from "@/components/kitchen/EditOrderModal";
 import { PrintReceipt } from "@/components/kitchen/PrintReceipt";
 import { printReceipt } from "@/lib/printReceipt";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +45,9 @@ interface Order {
   payment_method: string | null;
   troco: number | null;
   archived?: boolean;
+  last_modified_at?: string | null;
+  last_modified_by?: string | null;
+  observations?: string | null;
   order_items: OrderItem[];
 }
 
@@ -74,6 +78,8 @@ const Kanban = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState("kanban");
@@ -390,6 +396,15 @@ const Kanban = () => {
     setShowDetails(true);
   };
 
+  const handleEditOrder = (order: Order) => {
+    setEditOrder(order);
+    setShowEditModal(true);
+  };
+
+  const handleOrderUpdated = () => {
+    fetchOrders();
+  };
+
   const handlePrint = (order: Order) => {
     setShowDetails(false);
     setPrintOrder(order);
@@ -445,8 +460,10 @@ const Kanban = () => {
                           onAdvance={() => moveOrder(order.id, order.status)}
                           onViewDetails={() => handleViewDetails(order)}
                           onCancel={cancelOrder}
+                          onEdit={() => handleEditOrder(order)}
                           canAdvance={col.status !== "delivered"}
                           canCancel={order.status === "pending"}
+                          canEdit={order.status !== "cancelled" && order.status !== "delivered"}
                         />
                         {archiveSupported && col.status === "delivered" && (
                           <Button
@@ -530,6 +547,13 @@ const Kanban = () => {
         open={showDetails}
         onClose={() => setShowDetails(false)}
         onPrint={handlePrint}
+      />
+
+      <EditOrderModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        order={editOrder}
+        onOrderUpdated={handleOrderUpdated}
       />
     </AdminLayout>
   );
