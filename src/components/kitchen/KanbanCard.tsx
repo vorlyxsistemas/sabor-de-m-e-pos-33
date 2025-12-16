@@ -60,7 +60,10 @@ export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: Kanb
       if (isLunch) {
         return `${oi.quantity}x Almoço (${extras?.base?.name || "Base"})`;
       }
-      return `${oi.quantity}x ${oi.item?.name || "Item"}`;
+
+      const name = oi.item?.name || "Item";
+      const variation = extras?.selected_variation;
+      return variation ? `${oi.quantity}x ${name} (${variation})` : `${oi.quantity}x ${name}`;
     })
     .join(", ") || "Sem itens";
 
