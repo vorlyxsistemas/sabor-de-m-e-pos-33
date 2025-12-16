@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { KanbanCard } from "@/components/kitchen/KanbanCard";
 import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
+import { EditOrderModal } from "@/components/kitchen/EditOrderModal";
 import { PrintReceipt } from "@/components/kitchen/PrintReceipt";
 import { printReceipt } from "@/lib/printReceipt";
 
@@ -38,6 +39,8 @@ interface Order {
   scheduled_for: string | null;
   payment_method: string | null;
   troco: number | null;
+  last_modified_at?: string | null;
+  observations?: string | null;
   order_items: OrderItem[];
 }
 
@@ -62,6 +65,8 @@ const StaffKanban = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const printedOrdersRef = useRef<Set<string>>(new Set());
@@ -274,6 +279,11 @@ const StaffKanban = () => {
     setShowDetails(true);
   };
 
+  const handleEditOrder = (order: Order) => {
+    setEditOrder(order);
+    setShowEditModal(true);
+  };
+
   const handlePrint = (order: Order) => {
     setShowDetails(false);
     setPrintOrder(order);
@@ -313,8 +323,10 @@ const StaffKanban = () => {
                     onAdvance={() => moveOrder(order.id, order.status)}
                     onViewDetails={() => handleViewDetails(order)}
                     onCancel={cancelOrder}
+                    onEdit={() => handleEditOrder(order)}
                     canAdvance={col.status !== "delivered"}
                     canCancel={order.status === "pending"}
+                    canEdit={order.status !== "cancelled" && order.status !== "delivered"}
                   />
                 ))}
                 {columnOrders.length === 0 && (
@@ -333,6 +345,13 @@ const StaffKanban = () => {
         open={showDetails}
         onClose={() => setShowDetails(false)}
         onPrint={handlePrint}
+      />
+
+      <EditOrderModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        order={editOrder}
+        onOrderUpdated={fetchOrders}
       />
     </StaffLayout>
   );

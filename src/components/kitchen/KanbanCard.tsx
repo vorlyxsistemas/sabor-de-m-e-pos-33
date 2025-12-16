@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Eye, Truck, Package, UtensilsCrossed, Clock, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronRight, Eye, Truck, Package, UtensilsCrossed, Clock, X, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { CancelOrderDialog } from "@/components/order/CancelOrderDialog";
 
@@ -21,6 +22,7 @@ interface Order {
   table_number: number | null;
   created_at: string;
   order_items: OrderItem[];
+  last_modified_at?: string | null;
 }
 
 interface KanbanCardProps {
@@ -28,8 +30,10 @@ interface KanbanCardProps {
   onAdvance: () => void;
   onViewDetails: () => void;
   onCancel?: (orderId: string, reason: string) => Promise<void>;
+  onEdit?: () => void;
   canAdvance: boolean;
   canCancel?: boolean;
+  canEdit?: boolean;
 }
 
 const orderTypeConfig: Record<string, { icon: React.ReactNode; label: string; bgColor: string; textColor: string }> = {
@@ -53,13 +57,14 @@ const orderTypeConfig: Record<string, { icon: React.ReactNode; label: string; bg
   },
 };
 
-export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, canAdvance, canCancel = true }: KanbanCardProps) {
+export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, canAdvance, canCancel = true, canEdit = false }: KanbanCardProps) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
   const orderNumber = order.id.slice(-6).toUpperCase();
   const time = format(new Date(order.created_at), "HH:mm");
   const typeConfig = orderTypeConfig[order.order_type] || orderTypeConfig.local;
+  const wasModified = !!order.last_modified_at;
 
   const itemsSummary = order.order_items
     ?.map((oi) => {
@@ -91,11 +96,18 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, canAdvan
       <Card
         className="w-full max-w-full min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm transition-shadow box-border relative z-[1]"
       >
-        {/* Top: Order ID + Badge */}
+        {/* Top: Order ID + Badge + Modified indicator */}
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-sm text-foreground/80 truncate">
-            #{orderNumber}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm text-foreground/80 truncate">
+              #{orderNumber}
+            </span>
+            {wasModified && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200">
+                Atualizado
+              </Badge>
+            )}
+          </div>
           <div
             className={`flex items-center gap-1 px-1.5 h-5 rounded-full text-xs font-medium shrink-0 ${typeConfig.bgColor} ${typeConfig.textColor}`}
           >
@@ -124,7 +136,7 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, canAdvan
         </div>
 
       {/* Actions */}
-      <div className="flex gap-1.5 mt-1.5">
+      <div className="flex gap-1.5 mt-1.5 flex-wrap">
         <Button
           size="sm"
           variant="outline"
@@ -134,6 +146,16 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, canAdvan
           <Eye className="h-3 w-3 mr-1" />
           Detalhes
         </Button>
+        {canEdit && onEdit && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 rounded-md text-blue-600 border-blue-200 hover:bg-blue-50"
+            onClick={onEdit}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        )}
         {canCancel && onCancel && (
           <Button
             size="sm"
