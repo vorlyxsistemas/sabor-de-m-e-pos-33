@@ -76,26 +76,45 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
       <style>
         {`
           @media print {
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
             * {
               visibility: hidden;
               color: #000 !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+            }
             .print-receipt, .print-receipt * {
               visibility: visible;
               color: #000 !important;
             }
             .print-receipt {
-              position: absolute;
-              left: 0;
+              position: fixed;
+              left: 50%;
               top: 0;
-              width: 80mm;
-              padding: 4mm;
+              transform: translateX(-50%);
+              width: 72mm;
+              max-width: 72mm;
+              padding: 2mm 4mm;
+              margin: 0 auto;
               background: #fff !important;
+              font-size: 12px;
             }
             .no-print {
               display: none !important;
+            }
+          }
+          @media print and (max-width: 58mm) {
+            .print-receipt {
+              width: 54mm;
+              max-width: 54mm;
+              font-size: 11px;
             }
           }
           .print-receipt {
@@ -126,14 +145,16 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
 
       <div 
         ref={printRef} 
-        className="print-receipt max-w-[300px] mx-auto p-4"
+        className="print-receipt mx-auto p-4"
         style={{ 
           fontFamily: "'Courier New', Courier, monospace",
-          fontSize: '13px',
+          fontSize: '12px',
           fontWeight: 700,
           lineHeight: 1.3,
           color: '#000',
-          background: '#fff'
+          background: '#fff',
+          maxWidth: '280px',
+          width: '100%'
         }}
       >
         {/* Header */}
