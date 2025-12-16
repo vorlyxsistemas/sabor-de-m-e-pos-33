@@ -359,6 +359,25 @@ Deno.serve(async (req) => {
       
       console.log('Final user_id for order:', userId)
 
+      // RULE 0: Customers cannot create "local" orders
+      if (userId && body.order_type === 'local') {
+        const isCustomer = await verifyRole(supabase, userId, 'customer')
+        const isAdmin = await verifyRole(supabase, userId, 'admin')
+        const isStaff = await verifyRole(supabase, userId, 'staff')
+        
+        // If user is customer and NOT admin/staff, block local orders
+        if (isCustomer && !isAdmin && !isStaff) {
+          console.log('Customer attempted to create local order - blocked')
+          return new Response(
+            JSON.stringify({ 
+              error: 'Clientes não podem criar pedidos do tipo Local',
+              message: 'Por favor, escolha Retirada ou Entrega'
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
       // Normalize address fields
       let bairro: string | undefined
       let cep: string | undefined
