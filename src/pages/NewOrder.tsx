@@ -52,6 +52,7 @@ const NewOrder = () => {
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<'local' | 'retirada' | 'entrega'>('local');
+  const [tableNumber, setTableNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -198,6 +199,7 @@ const NewOrder = () => {
           customer_name: customerName,
           customer_phone: customerPhone || null,
           order_type: orderType,
+          table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
           address: orderType === 'entrega' ? address : null,
           bairro: orderType === 'entrega' ? bairro : null,
           reference: orderType === 'entrega' ? reference : null,
@@ -426,6 +428,23 @@ const NewOrder = () => {
                   </div>
                 </RadioGroup>
               </div>
+              {orderType === 'local' && (
+                <div>
+                  <Label className="text-xs">Número da Mesa</Label>
+                  <Select value={tableNumber} onValueChange={setTableNumber}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a mesa" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border shadow-lg z-50">
+                      {Array.from({ length: 12 }, (_, i) => (
+                        <SelectItem key={i + 1} value={String(i + 1)}>
+                          Mesa {i + 1}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {orderType === 'entrega' && (
                 <>
                   <div>
