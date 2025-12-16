@@ -122,10 +122,16 @@ const CustomerMeusPedidos = () => {
 
     setIsCancelling(true);
     try {
-      const { error } = await supabase.functions.invoke("orders", {
-        method: "DELETE",
-        body: { id: selectedOrderForCancel.id, reason },
-      });
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancel_reason: reason,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: user.id
+        } as any)
+        .eq('id', selectedOrderForCancel.id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
