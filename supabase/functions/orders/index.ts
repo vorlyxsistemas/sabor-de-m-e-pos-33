@@ -79,6 +79,11 @@ const updateOrderStatusSchema = z.object({
   status: z.enum(['pending', 'A_PREPARAR', 'PREPARANDO', 'PRONTO', 'ENTREGUE', 'cancelled']),
 })
 
+const cancelOrderSchema = z.object({
+  id: uuidSchema,
+  reason: z.string().trim().min(1, 'Motivo é obrigatório').max(500, 'Motivo muito longo'),
+})
+
 function sanitizeString(input: string): string {
   return input.trim().replace(/[<>]/g, '').slice(0, 1000)
 }
@@ -777,50 +782,102 @@ Deno.serve(async (req) => {
       )
     }
 
-    // DELETE - Cancel order (REQUIRES ADMIN/STAFF AUTH + within 10 min window)
+    // DELETE - Cancel order (customer or staff/admin; reason required)
     if (req.method === 'DELETE') {
-      const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
-      if (authError) {
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
         return new Response(
-          JSON.stringify({ error: authError }),
+          JSON.stringify({ error: 'Não autorizado' }),
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      const orderId = url.searchParams.get('id')
-
-      // Validate orderId
-      const orderIdResult = uuidSchema.safeParse(orderId)
-      if (!orderIdResult.success) {
+      const rawBody = await req.json().catch(() => null)
+      const bodyResult = cancelOrderSchema.safeParse(rawBody)
+      if (!bodyResult.success) {
+        const errors = bodyResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
         return new Response(
-          JSON.stringify({ error: 'ID do pedido inválido' }),
+          JSON.stringify({ error: `Dados inválidos: ${errors}` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      // Check if order can be cancelled
-      const { data: canCancel, error: checkError } = await supabase
-        .rpc('can_cancel_order', { order_id: orderId })
+      const orderId = bodyResult.data.id
+      const cancelReason = sanitizeString(bodyResult.data.reason).slice(0, 500)
 
-      if (checkError) {
-        console.error('Error checking cancellation:', checkError)
-        throw checkError
+      const token = authHeader.replace('Bearer ', '')
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+      if (authError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Token inválido' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
-      if (!canCancel) {
+      const isAdmin = await verifyRole(supabase, user.id, 'admin')
+      const isStaff = await verifyRole(supabase, user.id, 'staff')
+      const isAuthorizedStaff = isAdmin || isStaff
+
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .select('id, status, created_at, user_id')
+        .eq('id', orderId)
+        .maybeSingle()
+
+      if (orderError) {
+        console.error('Error fetching order for cancellation:', orderError)
+        throw orderError
+      }
+
+      if (!order) {
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({ error: 'Pedido não encontrado' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Block cancellation if already preparing or beyond
+      if (order.status !== 'pending') {
+        return new Response(
+          JSON.stringify({
             error: 'Cancelamento não permitido',
-            message: 'Janela de cancelamento de 10 minutos expirada. Pedido já foi encaminhado para cozinha.'
+            message: 'Não é possível cancelar, o pedido já foi encaminhado para a cozinha.'
           }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
 
-      // Cancel the order
+      // Customer rules: must own order + within 10 minutes
+      if (!isAuthorizedStaff) {
+        if (!order.user_id || order.user_id !== user.id) {
+          return new Response(
+            JSON.stringify({ error: 'Cancelamento não permitido', message: 'Você só pode cancelar seus próprios pedidos.' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        const createdAt = new Date(order.created_at)
+        const minutesSinceCreation = (Date.now() - createdAt.getTime()) / (1000 * 60)
+        if (minutesSinceCreation > 10) {
+          return new Response(
+            JSON.stringify({
+              error: 'Cancelamento não permitido',
+              message: 'Janela de cancelamento de 10 minutos expirada. Pedido já foi encaminhado para cozinha.'
+            }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+      }
+
       const { data, error } = await supabase
         .from('orders')
-        .update({ status: 'cancelled' })
+        .update({
+          status: 'cancelled',
+          cancel_reason: cancelReason,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: user.id,
+        })
         .eq('id', orderId)
         .select()
         .single()
