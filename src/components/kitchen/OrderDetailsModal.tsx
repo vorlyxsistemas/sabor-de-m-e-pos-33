@@ -163,6 +163,12 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                 const extras = item.extras as any;
                 const isLunch = extras?.type === "lunch";
 
+                const regularExtras = !isLunch
+                  ? (Array.isArray(extras)
+                      ? extras
+                      : (Array.isArray(extras?.regularExtras) ? extras.regularExtras : []))
+                  : [];
+
                 return (
                   <div key={idx} className="border-b border-border/50 last:border-0 pb-2 last:pb-0">
                     <div className="flex justify-between text-sm">
@@ -213,10 +219,10 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                     )}
 
                     {/* Regular Extras */}
-                    {!isLunch && extras && Array.isArray(extras) && extras.length > 0 && (
+                    {!isLunch && regularExtras.length > 0 && (
                       <div className="mt-1 text-xs text-muted-foreground pl-2">
                         <span className="font-medium">Extras: </span>
-                        {extras.map((e: any) => e.name).join(", ")}
+                        {regularExtras.map((e: any) => e.name).join(", ")}
                       </div>
                     )}
                   </div>
