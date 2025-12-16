@@ -324,12 +324,12 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
             <div className="border rounded-lg p-3 space-y-3">
               <Label className="text-sm font-medium">Adicionar Item</Label>
               <div className="flex gap-2">
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <Select value={selectedCategory || "all"} onValueChange={(val) => setSelectedCategory(val === "all" ? "" : val)}>
                   <SelectTrigger className="w-[140px]">
                     <SelectValue placeholder="Categoria" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Todas</SelectItem>
+                  <SelectContent className="bg-background border shadow-lg z-50">
+                    <SelectItem value="all">Todas</SelectItem>
                     {categories.map(cat => (
                       <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                     ))}
@@ -339,8 +339,8 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Selecione um item" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {filteredItems.map(item => (
+                  <SelectContent className="bg-background border shadow-lg z-50">
+                    {filteredItems.filter(item => item.id).map(item => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.name} - R$ {Number(item.price).toFixed(2)}
                       </SelectItem>
