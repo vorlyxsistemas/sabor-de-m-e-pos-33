@@ -238,17 +238,10 @@ const StaffKanban = () => {
 
   const cancelOrder = async (orderId: string, reason: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { error } = await supabase
-        .from("orders")
-        .update({ 
-          status: "cancelled",
-          cancel_reason: reason,
-          cancelled_at: new Date().toISOString(),
-          cancelled_by: user?.id || null
-        } as any)
-        .eq("id", orderId);
+      const { error } = await supabase.functions.invoke("orders", {
+        method: "DELETE",
+        body: { id: orderId, reason },
+      });
 
       if (error) throw error;
 
@@ -314,7 +307,7 @@ const StaffKanban = () => {
                     onViewDetails={() => handleViewDetails(order)}
                     onCancel={cancelOrder}
                     canAdvance={col.status !== "delivered"}
-                    canCancel={order.status === "pending" || order.status === "preparing"}
+                    canCancel={order.status === "pending"}
                   />
                 ))}
                 {columnOrders.length === 0 && (
