@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Eye, Truck, Package, UtensilsCrossed, Clock } from "lucide-react";
+import { ChevronRight, Eye, Truck, Package, UtensilsCrossed, Clock, X } from "lucide-react";
 import { format } from "date-fns";
+import { CancelOrderDialog } from "@/components/order/CancelOrderDialog";
 
 interface OrderItem {
   quantity: number;
@@ -25,7 +27,9 @@ interface KanbanCardProps {
   order: Order;
   onAdvance: () => void;
   onViewDetails: () => void;
+  onCancel?: (orderId: string, reason: string) => Promise<void>;
   canAdvance: boolean;
+  canCancel?: boolean;
 }
 
 const orderTypeConfig: Record<string, { icon: React.ReactNode; label: string; bgColor: string; textColor: string }> = {
@@ -49,7 +53,10 @@ const orderTypeConfig: Record<string, { icon: React.ReactNode; label: string; bg
   },
 };
 
-export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: KanbanCardProps) {
+export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, canAdvance, canCancel = true }: KanbanCardProps) {
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+
   const orderNumber = order.id.slice(-6).toUpperCase();
   const time = format(new Date(order.created_at), "HH:mm");
   const typeConfig = orderTypeConfig[order.order_type] || orderTypeConfig.local;
@@ -68,64 +75,95 @@ export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: Kanb
     })
     .join(", ") || "Sem itens";
 
+  const handleCancelConfirm = async (reason: string) => {
+    if (!onCancel) return;
+    setIsCancelling(true);
+    try {
+      await onCancel(order.id, reason);
+      setCancelDialogOpen(false);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
-    <Card
-      className="w-full max-w-full min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm transition-shadow box-border relative z-[1]"
-    >
-      {/* Top: Order ID + Badge */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold text-sm text-foreground/80 truncate">
-          #{orderNumber}
-        </span>
-        <div
-          className={`flex items-center gap-1 px-1.5 h-5 rounded-full text-xs font-medium shrink-0 ${typeConfig.bgColor} ${typeConfig.textColor}`}
-        >
-          {typeConfig.icon}
-          <span>{typeConfig.label}</span>
-          {order.order_type === 'local' && order.table_number && (
-            <span className="ml-1">Mesa {order.table_number}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Content: Time, Name, Summary */}
-      <div className="flex flex-col gap-1 flex-1">
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Clock className="h-3 w-3" />
-          <span>{time}</span>
+    <>
+      <Card
+        className="w-full max-w-full min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm transition-shadow box-border relative z-[1]"
+      >
+        {/* Top: Order ID + Badge */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold text-sm text-foreground/80 truncate">
+            #{orderNumber}
+          </span>
+          <div
+            className={`flex items-center gap-1 px-1.5 h-5 rounded-full text-xs font-medium shrink-0 ${typeConfig.bgColor} ${typeConfig.textColor}`}
+          >
+            {typeConfig.icon}
+            <span>{typeConfig.label}</span>
+            {order.order_type === 'local' && order.table_number && (
+              <span className="ml-1">Mesa {order.table_number}</span>
+            )}
+          </div>
         </div>
 
-        <div className="text-sm font-medium text-foreground break-words">
-          {order.customer_name}
+        {/* Content: Time, Name, Summary */}
+        <div className="flex flex-col gap-1 flex-1">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>{time}</span>
+          </div>
+
+          <div className="text-sm font-medium text-foreground break-words">
+            {order.customer_name}
+          </div>
+
+          <div className="text-[13px] text-muted-foreground break-words leading-tight">
+            {itemsSummary}
+          </div>
         </div>
 
-        <div className="text-[13px] text-muted-foreground break-words leading-tight">
-          {itemsSummary}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-2 mt-1.5">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1 h-8 text-xs rounded-lg"
-          onClick={onViewDetails}
-        >
-          <Eye className="h-3.5 w-3.5 mr-1" />
-          Detalhes
-        </Button>
-        {canAdvance && (
+        {/* Actions */}
+        <div className="flex gap-2 mt-1.5">
           <Button
             size="sm"
+            variant="outline"
             className="flex-1 h-8 text-xs rounded-lg"
-            onClick={onAdvance}
+            onClick={onViewDetails}
           >
-            Avançar
-            <ChevronRight className="h-3.5 w-3.5 ml-1" />
+            <Eye className="h-3.5 w-3.5 mr-1" />
+            Detalhes
           </Button>
-        )}
-      </div>
-    </Card>
+          {canCancel && onCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs rounded-lg text-destructive border-destructive/50 hover:bg-destructive/10"
+              onClick={() => setCancelDialogOpen(true)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {canAdvance && (
+            <Button
+              size="sm"
+              className="flex-1 h-8 text-xs rounded-lg"
+              onClick={onAdvance}
+            >
+              Avançar
+              <ChevronRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      <CancelOrderDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        onConfirm={handleCancelConfirm}
+        orderNumber={orderNumber}
+        isLoading={isCancelling}
+      />
+    </>
   );
 }

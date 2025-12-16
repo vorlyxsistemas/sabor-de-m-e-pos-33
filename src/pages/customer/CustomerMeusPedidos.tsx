@@ -4,9 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Clock, ChefHat, CheckCircle, Truck, MapPin, Store } from "lucide-react";
-import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Loader2, Package, Clock, ChefHat, CheckCircle, Truck, MapPin, Store, XCircle, X } from "lucide-react";
+import { format, differenceInMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+import { CancelOrderDialog } from "@/components/order/CancelOrderDialog";
 
 interface Order {
   id: string;
@@ -22,6 +25,8 @@ interface Order {
   address: string | null;
   bairro: string | null;
   created_at: string;
+  cancel_reason?: string | null;
+  cancelled_at?: string | null;
   order_items: {
     id: string;
     quantity: number;
@@ -37,23 +42,27 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
   preparing: { label: "Preparando", color: "bg-blue-500", icon: ChefHat, step: 2 },
   ready: { label: "Pronto", color: "bg-green-500", icon: CheckCircle, step: 3 },
   delivered: { label: "Entregue", color: "bg-emerald-600", icon: Truck, step: 4 },
+  cancelled: { label: "Cancelado", color: "bg-destructive", icon: XCircle, step: 0 },
 };
 
 const CustomerMeusPedidos = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedOrderForCancel, setSelectedOrderForCancel] = useState<Order | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const fetchOrders = async () => {
     if (!user) return;
     
     console.log('Fetching orders for user:', user.id);
     
-    // Filter orders by user_id to only show orders made by this customer
     // @ts-ignore - Supabase types issue with complex queries
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, customer_phone, order_type, table_number, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, order_items(id, quantity, price, extras, tapioca_molhada, item:items(name))')
+      .select('id, customer_name, customer_phone, order_type, table_number, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, cancel_reason, cancelled_at, order_items(id, quantity, price, extras, tapioca_molhada, item:items(name))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20) as any;
@@ -82,6 +91,69 @@ const CustomerMeusPedidos = () => {
       supabase.removeChannel(channel);
     };
   }, [user]);
+
+  const canCancelOrder = (order: Order): { canCancel: boolean; reason?: string } => {
+    // Cannot cancel if already cancelled
+    if (order.status === 'cancelled') {
+      return { canCancel: false, reason: 'Pedido já cancelado' };
+    }
+
+    // Cannot cancel if preparing or beyond
+    if (order.status !== 'pending') {
+      return { canCancel: false, reason: 'Pedido já está em preparo' };
+    }
+
+    // Check 10-minute window
+    const minutesSinceCreation = differenceInMinutes(new Date(), new Date(order.created_at));
+    if (minutesSinceCreation > 10) {
+      return { canCancel: false, reason: 'Prazo de cancelamento expirado (10 min)' };
+    }
+
+    return { canCancel: true };
+  };
+
+  const handleCancelClick = (order: Order) => {
+    setSelectedOrderForCancel(order);
+    setCancelDialogOpen(true);
+  };
+
+  const handleCancelConfirm = async (reason: string) => {
+    if (!selectedOrderForCancel || !user) return;
+
+    setIsCancelling(true);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          cancel_reason: reason,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: user.id
+        } as any)
+        .eq('id', selectedOrderForCancel.id)
+        .eq('user_id', user.id); // Ensure user can only cancel their own orders
+
+      if (error) throw error;
+
+      toast({
+        title: "Pedido cancelado",
+        description: `Pedido #${selectedOrderForCancel.id.slice(-6).toUpperCase()} foi cancelado`,
+      });
+
+      setCancelDialogOpen(false);
+      setSelectedOrderForCancel(null);
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Error cancelling order:', error);
+      toast({
+        title: "Erro ao cancelar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const getOrderTypeIcon = (type: string) => {
     switch (type) {
@@ -124,9 +196,11 @@ const CustomerMeusPedidos = () => {
             const status = statusConfig[order.status] || statusConfig.pending;
             const StatusIcon = status.icon;
             const isDelivered = order.status === 'delivered';
+            const isCancelled = order.status === 'cancelled';
+            const cancelability = canCancelOrder(order);
 
             return (
-              <Card key={order.id} className={`transition-all ${!isDelivered ? 'border-primary/50 shadow-md' : ''}`}>
+              <Card key={order.id} className={`transition-all ${isCancelled ? 'opacity-60 border-destructive/30' : !isDelivered ? 'border-primary/50 shadow-md' : ''}`}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3">
@@ -158,31 +232,64 @@ const CustomerMeusPedidos = () => {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Progress Steps */}
-                  {!isDelivered && (
+                  {/* Cancellation Info */}
+                  {isCancelled && order.cancel_reason && (
+                    <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm">
+                      <p className="font-medium text-destructive flex items-center gap-2">
+                        <XCircle className="h-4 w-4" />
+                        Pedido cancelado
+                      </p>
+                      <p className="text-muted-foreground mt-1">
+                        <strong>Motivo:</strong> {order.cancel_reason}
+                      </p>
+                      {order.cancelled_at && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cancelado em {format(new Date(order.cancelled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Progress Steps - only show for non-cancelled orders */}
+                  {!isDelivered && !isCancelled && (
                     <div className="relative">
                       <div className="flex justify-between mb-2">
-                        {Object.entries(statusConfig).map(([key, config]) => {
-                          const isActive = status.step >= config.step;
-                          const isCurrent = status.step === config.step;
-                          const Icon = config.icon;
+                        {Object.entries(statusConfig)
+                          .filter(([key]) => key !== 'cancelled')
+                          .map(([key, config]) => {
+                            const isActive = status.step >= config.step;
+                            const isCurrent = status.step === config.step;
+                            const Icon = config.icon;
                           
-                          return (
-                            <div key={key} className={`flex flex-col items-center ${isCurrent ? 'scale-110' : ''} transition-transform`}>
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isActive ? config.color + ' text-white' : 'bg-muted text-muted-foreground'} ${isCurrent ? 'ring-2 ring-offset-2 ring-primary animate-pulse' : ''}`}>
-                                <Icon className="h-4 w-4" />
+                            return (
+                              <div key={key} className={`flex flex-col items-center ${isCurrent ? 'scale-110' : ''} transition-transform`}>
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isActive ? config.color + ' text-white' : 'bg-muted text-muted-foreground'} ${isCurrent ? 'ring-2 ring-offset-2 ring-primary animate-pulse' : ''}`}>
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <span className={`text-[10px] mt-1 ${isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                                  {config.label}
+                                </span>
                               </div>
-                              <span className={`text-[10px] mt-1 ${isActive ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                                {config.label}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                       <div className="absolute top-4 left-4 right-4 h-0.5 bg-muted -z-10">
                         <div className="h-full bg-primary transition-all duration-500" style={{ width: `${((status.step - 1) / 3) * 100}%` }} />
                       </div>
                     </div>
+                  )}
+
+                  {/* Cancel Button */}
+                  {cancelability.canCancel && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-destructive border-destructive/50 hover:bg-destructive/10"
+                      onClick={() => handleCancelClick(order)}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancelar Pedido
+                    </Button>
                   )}
 
                   {/* Order Items */}
@@ -266,6 +373,16 @@ const CustomerMeusPedidos = () => {
           })
         )}
       </div>
+
+      {selectedOrderForCancel && (
+        <CancelOrderDialog
+          open={cancelDialogOpen}
+          onOpenChange={setCancelDialogOpen}
+          onConfirm={handleCancelConfirm}
+          orderNumber={selectedOrderForCancel.id.slice(-6).toUpperCase()}
+          isLoading={isCancelling}
+        />
+      )}
     </CustomerLayout>
   );
 };
