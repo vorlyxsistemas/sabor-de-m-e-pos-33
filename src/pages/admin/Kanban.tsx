@@ -296,6 +296,39 @@ const Kanban = () => {
     }
   };
 
+  const cancelOrder = async (orderId: string, reason: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from("orders")
+        .update({ 
+          status: "cancelled",
+          cancel_reason: reason,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: user?.id || null
+        } as any)
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+      toast({
+        title: "Pedido cancelado",
+        description: `Pedido #${orderId.slice(-6).toUpperCase()} foi cancelado`,
+      });
+    } catch (error: any) {
+      console.error("Erro ao cancelar pedido:", error);
+      toast({
+        title: "Erro ao cancelar",
+        description: error.message || "Tente novamente",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   const archiveOrder = async (orderId: string) => {
     if (!archiveSupported) {
       toast({
@@ -411,7 +444,9 @@ const Kanban = () => {
                           order={order}
                           onAdvance={() => moveOrder(order.id, order.status)}
                           onViewDetails={() => handleViewDetails(order)}
+                          onCancel={cancelOrder}
                           canAdvance={col.status !== "delivered"}
+                          canCancel={order.status === "pending" || order.status === "preparing"}
                         />
                         {archiveSupported && col.status === "delivered" && (
                           <Button
