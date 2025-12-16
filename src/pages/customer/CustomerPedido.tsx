@@ -287,14 +287,23 @@ const CustomerPedido = () => {
               sides: item.lunchSides,
               regularExtras: item.extras
             };
-          } else if (item.selected_variation) {
-            // Item with variation - include variation in extras object
-            extrasData = {
-              selected_variation: item.selected_variation,
-              regularExtras: item.extras
-            };
           } else {
-            extrasData = item.extras;
+            const parsedVariation = (() => {
+              const match = item.name.match(/\(([^)]+)\)\s*$/);
+              return match?.[1]?.trim();
+            })();
+
+            const variation = item.selected_variation || parsedVariation;
+
+            if (variation) {
+              // Item with variation - include variation in extras object
+              extrasData = {
+                selected_variation: variation,
+                regularExtras: item.extras
+              };
+            } else {
+              extrasData = item.extras;
+            }
           }
 
           return {

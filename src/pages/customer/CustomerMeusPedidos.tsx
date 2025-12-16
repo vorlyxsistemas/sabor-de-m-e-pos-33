@@ -188,7 +188,17 @@ const CustomerMeusPedidos = () => {
                       const extrasAny = item.extras as any;
                       const isLunch = extrasAny?.type === "lunch";
                       const itemLabel = item.item?.name || (isLunch ? `Almoço - ${extrasAny?.base?.name}` : "Item");
-                      const extras = Array.isArray(item.extras) ? item.extras : [];
+
+                      const selectedVariation =
+                        !isLunch && extrasAny && typeof extrasAny === "object" && !Array.isArray(extrasAny)
+                          ? (extrasAny.selected_variation as string | undefined)
+                          : undefined;
+
+                      const regularExtras = !isLunch
+                        ? (Array.isArray(extrasAny)
+                            ? extrasAny
+                            : (Array.isArray(extrasAny?.regularExtras) ? extrasAny.regularExtras : []))
+                        : [];
 
                       return (
                         <div key={item.id || idx} className="flex justify-between items-start">
@@ -197,9 +207,14 @@ const CustomerMeusPedidos = () => {
                             {item.tapioca_molhada && (
                               <Badge variant="secondary" className="ml-2 text-[10px]">Molhada</Badge>
                             )}
-                            {extras.length > 0 && (
+                            {selectedVariation && (
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                + {extras.map((e: any) => e.name || e).join(', ')}
+                                Tipo: {selectedVariation}
+                              </p>
+                            )}
+                            {regularExtras.length > 0 && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                + {regularExtras.map((e: any) => e.name || e).join(', ')}
                               </p>
                             )}
                           </div>
