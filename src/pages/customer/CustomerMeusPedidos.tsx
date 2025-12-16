@@ -189,10 +189,7 @@ const CustomerMeusPedidos = () => {
                       const isLunch = extrasAny?.type === "lunch";
                       const itemLabel = item.item?.name || (isLunch ? `Almoço - ${extrasAny?.base?.name}` : "Item");
 
-                      const selectedVariation =
-                        !isLunch && extrasAny && typeof extrasAny === "object" && !Array.isArray(extrasAny)
-                          ? (extrasAny.selected_variation as string | undefined)
-                          : undefined;
+                      const selectedVariation = !isLunch ? extrasAny?.selected_variation : undefined;
 
                       const regularExtras = !isLunch
                         ? (Array.isArray(extrasAny)
