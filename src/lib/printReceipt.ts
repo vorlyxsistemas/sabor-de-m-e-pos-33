@@ -14,6 +14,7 @@ interface Order {
   customer_phone: string | null;
   status: string;
   order_type: string;
+  table_number: number | null;
   address: string | null;
   bairro: string | null;
   cep: string | null;
@@ -217,7 +218,7 @@ export function generateReceiptHTML(order: Order): string {
         <div style="font-weight: 900; font-size: 16px;">PEDIDO: #${orderNumber}</div>
         <div style="font-weight: 700;">DATA: ${dateTime}</div>
         <div style="font-weight: 900; font-size: 16px; border: 2px solid #000; padding: 4px; margin-top: 4px; text-align: center;">
-          ${orderTypeLabels[order.order_type] || order.order_type}
+          ${orderTypeLabels[order.order_type] || order.order_type}${order.order_type === 'local' && order.table_number ? ` - MESA ${order.table_number}` : ''}
         </div>
       </div>
 
@@ -346,7 +347,10 @@ export function generateESCPOSCommands(order: Order): Uint8Array {
   
   // Double height + bold for order type
   commands.push(ESC, 0x21, 0x38);
-  commands.push(...encoder.encode(`${orderTypeLabels[order.order_type] || order.order_type}\n`));
+  const orderTypeText = order.order_type === 'local' && order.table_number 
+    ? `${orderTypeLabels[order.order_type] || order.order_type} - MESA ${order.table_number}`
+    : (orderTypeLabels[order.order_type] || order.order_type);
+  commands.push(...encoder.encode(`${orderTypeText}\n`));
   commands.push(ESC, 0x21, 0x08);
   
   commands.push(...encoder.encode("--------------------------------\n"));
