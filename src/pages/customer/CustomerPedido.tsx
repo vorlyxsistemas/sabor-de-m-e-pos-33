@@ -82,6 +82,7 @@ const CustomerPedido = () => {
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
   const [troco, setTroco] = useState('');
+  const [tableNumber, setTableNumber] = useState<string>('');
   const [copiedPix, setCopiedPix] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -268,6 +269,7 @@ const CustomerPedido = () => {
         customer_name: customerName.trim(),
         customer_phone: customerPhone?.trim() || '',
         order_type: orderType,
+        table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
         delivery_tax: isDelivery ? deliveryTax : 0,
         subtotal,
         total,
@@ -528,6 +530,23 @@ const CustomerPedido = () => {
                   </div>
                 </RadioGroup>
               </div>
+              {orderType === 'local' && (
+                <div>
+                  <Label className="text-xs">Número da Mesa</Label>
+                  <Select value={tableNumber} onValueChange={setTableNumber}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a mesa" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border shadow-lg z-50">
+                      {Array.from({ length: 12 }, (_, i) => (
+                        <SelectItem key={i + 1} value={String(i + 1)}>
+                          Mesa {i + 1}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {orderType === 'entrega' && (
                 <>
                   <div>

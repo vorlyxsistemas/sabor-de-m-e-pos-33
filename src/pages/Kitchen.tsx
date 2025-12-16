@@ -25,6 +25,7 @@ interface Order {
   customer_phone: string | null;
   status: OrderStatus;
   order_type: string;
+  table_number: number | null;
   address: string | null;
   bairro: string | null;
   cep: string | null;
@@ -91,6 +92,7 @@ const Kitchen = () => {
           customer_phone,
           status,
           order_type,
+          table_number,
           address,
           bairro,
           cep,

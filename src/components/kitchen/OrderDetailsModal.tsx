@@ -21,6 +21,7 @@ interface Order {
   customer_phone: string | null;
   status: string;
   order_type: string;
+  table_number: number | null;
   address: string | null;
   bairro: string | null;
   cep: string | null;

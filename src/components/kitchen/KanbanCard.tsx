@@ -16,6 +16,7 @@ interface Order {
   customer_name: string;
   status: string;
   order_type: string;
+  table_number: number | null;
   created_at: string;
   order_items: OrderItem[];
 }
@@ -81,6 +82,9 @@ export function KanbanCard({ order, onAdvance, onViewDetails, canAdvance }: Kanb
         >
           {typeConfig.icon}
           <span>{typeConfig.label}</span>
+          {order.order_type === 'local' && order.table_number && (
+            <span className="ml-1">Mesa {order.table_number}</span>
+          )}
         </div>
       </div>
 

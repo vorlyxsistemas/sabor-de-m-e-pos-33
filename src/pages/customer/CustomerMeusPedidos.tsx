@@ -13,6 +13,7 @@ interface Order {
   customer_name: string;
   customer_phone: string | null;
   order_type: string;
+  table_number: number | null;
   status: string;
   subtotal: number;
   delivery_tax: number;
@@ -52,7 +53,7 @@ const CustomerMeusPedidos = () => {
     // @ts-ignore - Supabase types issue with complex queries
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, customer_phone, order_type, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, order_items(id, quantity, price, extras, tapioca_molhada, item:items(name))')
+      .select('id, customer_name, customer_phone, order_type, table_number, status, subtotal, delivery_tax, extras_fee, total, address, bairro, created_at, order_items(id, quantity, price, extras, tapioca_molhada, item:items(name))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(20) as any;
@@ -145,6 +146,9 @@ const CustomerMeusPedidos = () => {
                       <Badge variant="outline" className="gap-1">
                         {getOrderTypeIcon(order.order_type)}
                         {getOrderTypeLabel(order.order_type)}
+                        {order.order_type === 'local' && order.table_number && (
+                          <span className="ml-1">Mesa {order.table_number}</span>
+                        )}
                       </Badge>
                       <Badge className={`${status.color} text-white`}>
                         {status.label}
