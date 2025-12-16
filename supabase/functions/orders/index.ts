@@ -25,10 +25,17 @@ const lunchExtrasSchema = z.object({
     id: z.string().optional(),
     name: z.string(),
     price: z.number(),
+    singleMeatPrice: z.number().optional(),
   }),
   meats: z.array(z.string()).optional(),
   extraMeats: z.array(z.string()).optional(),
   sides: z.array(z.string()).optional(),
+  regularExtras: z.array(extraSchema).optional(),
+})
+
+// Schema for items with variation selection
+const variationExtrasSchema = z.object({
+  selected_variation: z.string().max(200),
   regularExtras: z.array(extraSchema).optional(),
 })
 
@@ -37,7 +44,7 @@ const orderItemInputSchema = z.object({
   quantity: z.number().int().min(1).max(50),
   price: z.number().min(0).max(9999.99).optional(),
   tapioca_molhada: z.boolean().optional().default(false),
-  extras: z.union([z.array(extraSchema), lunchExtrasSchema]).optional().default([]),
+  extras: z.union([z.array(extraSchema), lunchExtrasSchema, variationExtrasSchema]).optional().default([]),
 })
 
 const addressObjectSchema = z.object({
