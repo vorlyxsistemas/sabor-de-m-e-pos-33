@@ -26,6 +26,7 @@ interface Order {
   created_at: string;
   payment_method: string | null;
   troco: number | null;
+  observations?: string | null;
   order_items: OrderItem[];
 }
 
@@ -71,30 +72,39 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
   const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NÃO INFORMADO");
 
   return (
-    <div className="fixed inset-0 bg-background z-50 p-4 overflow-auto print:p-0">
+    <div className="fixed inset-0 bg-white z-50 p-4 overflow-auto print:p-0">
       <style>
         {`
           @media print {
-            body * {
+            * {
               visibility: hidden;
+              color: #000 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
             .print-receipt, .print-receipt * {
               visibility: visible;
               color: #000 !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
             .print-receipt {
               position: absolute;
               left: 0;
               top: 0;
               width: 80mm;
-              padding: 5mm;
+              padding: 4mm;
               background: #fff !important;
             }
             .no-print {
               display: none !important;
             }
+          }
+          .print-receipt {
+            font-family: 'Courier New', Courier, monospace;
+            color: #000 !important;
+            background: #fff !important;
+          }
+          .print-receipt * {
+            color: #000 !important;
           }
         `}
       </style>
@@ -102,84 +112,134 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
       <div className="no-print mb-4 flex gap-2">
         <button
           onClick={() => window.print()}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded font-medium"
+          className="px-4 py-2 bg-black text-white rounded font-bold"
         >
           Imprimir
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-2 bg-secondary text-secondary-foreground rounded"
+          className="px-4 py-2 bg-gray-800 text-white rounded font-bold"
         >
           Fechar
         </button>
       </div>
 
-      <div ref={printRef} className="print-receipt font-mono text-sm max-w-[300px] mx-auto bg-white text-black p-4">
-        <div className="text-center mb-4">
-          <div className="font-bold text-lg">SABOR DE MÃE</div>
-          <div className="text-xs font-bold">================================</div>
+      <div 
+        ref={printRef} 
+        className="print-receipt max-w-[300px] mx-auto p-4"
+        style={{ 
+          fontFamily: "'Courier New', Courier, monospace",
+          fontSize: '13px',
+          fontWeight: 700,
+          lineHeight: 1.3,
+          color: '#000',
+          background: '#fff'
+        }}
+      >
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+          <div style={{ fontWeight: 900, fontSize: '20px', letterSpacing: '1px' }}>SABOR DE MÃE</div>
+          <div style={{ fontWeight: 900, fontSize: '13px' }}>================================</div>
         </div>
 
-        <div className="mb-2">
-          <div className="font-bold">PEDIDO: #{orderNumber}</div>
-          <div>DATA: {dateTime}</div>
-          <div className="font-bold text-base">TIPO: {orderTypeLabels[order.order_type] || order.order_type}</div>
+        {/* Order Info */}
+        <div style={{ marginBottom: '10px' }}>
+          <div style={{ fontWeight: 900, fontSize: '16px' }}>PEDIDO: #{orderNumber}</div>
+          <div style={{ fontWeight: 700 }}>DATA: {dateTime}</div>
+          <div style={{ 
+            fontWeight: 900, 
+            fontSize: '16px', 
+            border: '2px solid #000', 
+            padding: '4px', 
+            marginTop: '4px', 
+            textAlign: 'center' 
+          }}>
+            {orderTypeLabels[order.order_type] || order.order_type}
+          </div>
         </div>
 
-        <div className="mb-2">
-          <div className="font-bold">CLIENTE: {order.customer_name.toUpperCase()}</div>
-          {order.customer_phone && <div>TEL: {order.customer_phone}</div>}
+        <div style={{ fontWeight: 900, fontSize: '13px' }}>--------------------------------</div>
+
+        {/* Customer Info */}
+        <div style={{ marginBottom: '10px' }}>
+          <div style={{ fontWeight: 900, fontSize: '15px' }}>★ CLIENTE: {order.customer_name.toUpperCase()}</div>
+          {order.customer_phone && <div style={{ fontWeight: 700 }}>TEL: {order.customer_phone}</div>}
         </div>
 
+        {/* Delivery Info */}
         {order.order_type === "entrega" && (
-          <div className="mb-2 border-2 border-black p-2">
-            <div className="font-bold mb-1">ENTREGA:</div>
-            {order.bairro && <div className="font-bold">BAIRRO: {order.bairro.toUpperCase()}</div>}
-            {order.address && <div>ENDEREÇO: {order.address.toUpperCase()}</div>}
-            {order.cep && <div>CEP: {order.cep}</div>}
-            {order.reference && <div className="font-bold">REF: {order.reference.toUpperCase()}</div>}
+          <div style={{ 
+            margin: '12px 0', 
+            border: '3px solid #000', 
+            padding: '10px',
+            background: '#fff'
+          }}>
+            <div style={{ fontWeight: 900, fontSize: '15px', marginBottom: '6px', textDecoration: 'underline' }}>
+              *** ENTREGA ***
+            </div>
+            {order.bairro && (
+              <div style={{ fontWeight: 900, fontSize: '14px' }}>BAIRRO: {order.bairro.toUpperCase()}</div>
+            )}
+            {order.address && (
+              <div style={{ fontWeight: 700, fontSize: '13px' }}>ENDEREÇO: {order.address.toUpperCase()}</div>
+            )}
+            {order.cep && (
+              <div style={{ fontWeight: 700, fontSize: '13px' }}>CEP: {order.cep}</div>
+            )}
+            {order.reference && (
+              <div style={{ fontWeight: 900, fontSize: '14px', marginTop: '4px' }}>
+                ★ REF: {order.reference.toUpperCase()}
+              </div>
+            )}
           </div>
         )}
 
-        <div className="my-2">
-          <div className="text-xs font-bold">======== ITENS DO PEDIDO ========</div>
+        {/* Items Header */}
+        <div style={{ margin: '10px 0' }}>
+          <div style={{ fontWeight: 900, fontSize: '13px' }}>======== ITENS DO PEDIDO ========</div>
         </div>
 
-        <div className="mb-2">
+        {/* Items */}
+        <div style={{ marginBottom: '10px' }}>
           {order.order_items?.map((item, idx) => {
             const extras = item.extras as any;
             const isLunch = extras?.type === "lunch";
             const itemName = item.item?.name || (isLunch ? `ALMOÇO - ${extras?.base?.name}` : "ITEM");
 
             return (
-              <div key={idx} className="mb-2">
-                <div className="flex justify-between font-bold">
+              <div key={idx} style={{ marginBottom: '10px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  fontWeight: 900, 
+                  fontSize: '14px' 
+                }}>
                   <span>
-                    {item.quantity} UND. {itemName.toUpperCase()}
+                    {item.quantity}x {itemName.toUpperCase()}
                     {item.tapioca_molhada && " (MOLHADA)"}
                   </span>
                   <span>R${item.price.toFixed(2)}</span>
                 </div>
                 
-                {/* Selected Variation (e.g., type of broth) */}
+                {/* Selected Variation */}
                 {!isLunch && extras?.selected_variation && (
-                  <div className="pl-2 text-xs font-bold">
-                    TIPO: {extras.selected_variation.toUpperCase()}
+                  <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
+                    ► TIPO: {extras.selected_variation.toUpperCase()}
                   </div>
                 )}
                 
                 {/* Lunch Details */}
                 {isLunch && (
-                  <div className="pl-2 text-xs">
+                  <div style={{ paddingLeft: '12px', fontSize: '13px' }}>
                     {extras?.meats && extras.meats.length > 0 && (
-                      <div className="font-bold">CARNES: {extras.meats.join(", ").toUpperCase()}</div>
+                      <div style={{ fontWeight: 700 }}>► CARNES: {extras.meats.join(", ").toUpperCase()}</div>
                     )}
                     {extras?.extraMeats && extras.extraMeats.length > 0 && (
-                      <div className="font-bold">+ EXTRAS: {extras.extraMeats.join(", ").toUpperCase()}</div>
+                      <div style={{ fontWeight: 700 }}>► + EXTRAS: {extras.extraMeats.join(", ").toUpperCase()}</div>
                     )}
                     {extras?.sides && extras.sides.length > 0 && (
-                      <div>
-                        ACOMP: {extras.sides.map((s: string) => {
+                      <div style={{ fontWeight: 700 }}>
+                        ► ACOMP: {extras.sides.map((s: string) => {
                           const sideMap: Record<string, string> = {
                             macarrao: "MACARRÃO", farofa: "FAROFA",
                             macaxeira: "MACAXEIRA", salada: "SALADA"
@@ -193,8 +253,8 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
 
                 {/* Regular Extras */}
                 {!isLunch && extras && Array.isArray(extras) && extras.length > 0 && (
-                  <div className="pl-2 text-xs font-bold">
-                    EXTRAS: {extras.map((e: any) => e.name.toUpperCase()).join(", ")}
+                  <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
+                    ► EXTRAS: {extras.map((e: any) => e.name.toUpperCase()).join(", ")}
                   </div>
                 )}
               </div>
@@ -202,43 +262,72 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
           })}
         </div>
 
-        <div className="text-xs font-bold">================================</div>
+        <div style={{ fontWeight: 900, fontSize: '13px' }}>================================</div>
 
-        <div className="mt-2 space-y-1 font-bold">
-          <div className="flex justify-between">
+        {/* Totals */}
+        <div style={{ marginTop: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
             <span>SUBTOTAL:</span>
             <span>R$ {order.subtotal.toFixed(2)}</span>
           </div>
           {order.extras_fee && order.extras_fee > 0 && (
-            <div className="flex justify-between">
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
               <span>EXTRAS:</span>
               <span>R$ {order.extras_fee.toFixed(2)}</span>
             </div>
           )}
           {order.delivery_tax && order.delivery_tax > 0 && (
-            <div className="flex justify-between">
-              <span>TAXA DE ENTREGA:</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
+              <span>TAXA ENTREGA:</span>
               <span>R$ {order.delivery_tax.toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between text-base border-t-2 border-black pt-1">
-            <span>TOTAL:</span>
+          {/* Grand Total */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            fontWeight: 900, 
+            fontSize: '18px',
+            borderTop: '3px solid #000',
+            paddingTop: '6px',
+            marginTop: '6px'
+          }}>
+            <span>★ TOTAL:</span>
             <span>R$ {order.total.toFixed(2)}</span>
           </div>
         </div>
 
         {/* Payment Info */}
-        <div className="mt-2 border-2 border-black p-2">
-          <div className="font-bold">PAGAMENTO: {paymentLabel}</div>
+        <div style={{ 
+          marginTop: '12px', 
+          border: '3px solid #000', 
+          padding: '10px',
+          background: '#fff'
+        }}>
+          <div style={{ fontWeight: 900, fontSize: '15px' }}>★ PAGAMENTO: {paymentLabel}</div>
           {paymentKey === "dinheiro" && order.troco && (
-            <div className="font-bold">TROCO PARA: R$ {order.troco.toFixed(2)}</div>
+            <div style={{ fontWeight: 900, fontSize: '14px' }}>TROCO PARA: R$ {order.troco.toFixed(2)}</div>
           )}
         </div>
 
-        <div className="mt-4 text-center text-xs font-bold">
-          <div>================================</div>
-          <div>OBRIGADO PELA PREFERÊNCIA!</div>
-          <div>================================</div>
+        {/* Observations */}
+        {order.observations && (
+          <div style={{ 
+            marginTop: '12px', 
+            border: '3px solid #000', 
+            padding: '10px',
+            background: '#fff'
+          }}>
+            <div style={{ fontWeight: 900, fontSize: '14px' }}>★ OBSERVAÇÕES:</div>
+            <div style={{ fontWeight: 700, fontSize: '13px' }}>{order.observations.toUpperCase()}</div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ textAlign: 'center', marginTop: '12px' }}>
+          <div style={{ fontWeight: 900, fontSize: '13px' }}>================================</div>
+          <div style={{ fontWeight: 900, fontSize: '12px' }}>OBRIGADO PELA PREFERÊNCIA!</div>
+          <div style={{ fontWeight: 900, fontSize: '13px' }}>================================</div>
         </div>
       </div>
     </div>
