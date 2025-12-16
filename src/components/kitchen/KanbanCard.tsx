@@ -123,47 +123,47 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, canAdvan
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 mt-1.5">
+      {/* Actions */}
+      <div className="flex gap-1.5 mt-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[11px] px-2 rounded-md"
+          onClick={onViewDetails}
+        >
+          <Eye className="h-3 w-3 mr-1" />
+          Detalhes
+        </Button>
+        {canCancel && onCancel && (
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 h-8 text-xs rounded-lg"
-            onClick={onViewDetails}
+            className="h-7 px-2 rounded-md text-destructive border-destructive/50 hover:bg-destructive/10"
+            onClick={() => setCancelDialogOpen(true)}
           >
-            <Eye className="h-3.5 w-3.5 mr-1" />
-            Detalhes
+            <X className="h-3 w-3" />
           </Button>
-          {canCancel && onCancel && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs rounded-lg text-destructive border-destructive/50 hover:bg-destructive/10"
-              onClick={() => setCancelDialogOpen(true)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {canAdvance && (
-            <Button
-              size="sm"
-              className="flex-1 h-8 text-xs rounded-lg"
-              onClick={onAdvance}
-            >
-              Avançar
-              <ChevronRight className="h-3.5 w-3.5 ml-1" />
-            </Button>
-          )}
-        </div>
-      </Card>
+        )}
+        {canAdvance && (
+          <Button
+            size="sm"
+            className="flex-1 h-7 text-[11px] px-2 rounded-md"
+            onClick={onAdvance}
+          >
+            Avançar
+            <ChevronRight className="h-3 w-3 ml-0.5" />
+          </Button>
+        )}
+      </div>
+    </Card>
 
-      <CancelOrderDialog
-        open={cancelDialogOpen}
-        onOpenChange={setCancelDialogOpen}
-        onConfirm={handleCancelConfirm}
-        orderNumber={orderNumber}
-        isLoading={isCancelling}
-      />
-    </>
-  );
+    <CancelOrderDialog
+      open={cancelDialogOpen}
+      onOpenChange={setCancelDialogOpen}
+      onConfirm={handleCancelConfirm}
+      orderNumber={orderNumber}
+      isLoading={isCancelling}
+    />
+  </>
+);
 }
