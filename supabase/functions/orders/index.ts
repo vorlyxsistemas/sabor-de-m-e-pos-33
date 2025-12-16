@@ -528,11 +528,25 @@ Deno.serve(async (req) => {
           console.log(`Applied tapioca molhada to ${dbItem.name}: +R$1.00`)
         }
 
-        // RULE 5: Apply extras
-        const extrasArray = Array.isArray(orderItem.extras) ? orderItem.extras : []
+        // RULE 5: Apply extras (supports array OR variation object with { selected_variation, regularExtras })
+        const extrasInput = orderItem.extras as any
+        const selectedVariation =
+          extrasInput &&
+          typeof extrasInput === 'object' &&
+          !Array.isArray(extrasInput) &&
+          extrasInput.type !== 'lunch'
+            ? (extrasInput.selected_variation as string | undefined)
+            : undefined
+
+        const extrasArray: any[] = Array.isArray(extrasInput)
+          ? extrasInput
+          : (extrasInput?.regularExtras && Array.isArray(extrasInput.regularExtras)
+              ? extrasInput.regularExtras
+              : [])
+
         if (extrasArray.length > 0 && dbItem.allow_extras) {
           const categoryName = dbItem.category?.name || ''
-          
+
           for (const extra of extrasArray) {
             const extraCode = extra.code || extra.name || extra.id
 
@@ -547,7 +561,7 @@ Deno.serve(async (req) => {
             if (!extraCode) continue
 
             // Check global extras
-            const globalExtra = globalExtras?.find(e => 
+            const globalExtra = globalExtras?.find((e) =>
               e.code === extraCode || e.name === extraCode || e.id === extraCode
             )
             if (globalExtra) {
@@ -580,10 +594,14 @@ Deno.serve(async (req) => {
         subtotal += totalItemPrice
         extrasTotal += itemExtrasPrice * quantity
 
+        const extrasToPersist = selectedVariation
+          ? { selected_variation: selectedVariation, regularExtras: appliedExtras }
+          : appliedExtras
+
         orderItemsData.push({
           item_id: dbItem.id,
           quantity,
-          extras: appliedExtras,
+          extras: extrasToPersist,
           tapioca_molhada: tapiocaMolhadaApplied,
           price: itemPrice,
         })

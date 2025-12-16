@@ -199,68 +199,74 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
           <div style={{ fontWeight: 900, fontSize: '13px' }}>======== ITENS DO PEDIDO ========</div>
         </div>
 
-        {/* Items */}
-        <div style={{ marginBottom: '10px' }}>
-          {order.order_items?.map((item, idx) => {
-            const extras = item.extras as any;
-            const isLunch = extras?.type === "lunch";
-            const itemName = item.item?.name || (isLunch ? `ALMOÇO - ${extras?.base?.name}` : "ITEM");
+         {/* Items */}
+         <div style={{ marginBottom: '10px' }}>
+           {order.order_items?.map((item, idx) => {
+             const extras = item.extras as any;
+             const isLunch = extras?.type === "lunch";
+             const itemName = item.item?.name || (isLunch ? `ALMOÇO - ${extras?.base?.name}` : "ITEM");
 
-            return (
-              <div key={idx} style={{ marginBottom: '10px' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  fontWeight: 900, 
-                  fontSize: '14px' 
-                }}>
-                  <span>
-                    {item.quantity}x {itemName.toUpperCase()}
-                    {item.tapioca_molhada && " (MOLHADA)"}
-                  </span>
-                  <span>R${item.price.toFixed(2)}</span>
-                </div>
-                
-                {/* Selected Variation */}
-                {!isLunch && extras?.selected_variation && (
-                  <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
-                    ► TIPO: {extras.selected_variation.toUpperCase()}
-                  </div>
-                )}
-                
-                {/* Lunch Details */}
-                {isLunch && (
-                  <div style={{ paddingLeft: '12px', fontSize: '13px' }}>
-                    {extras?.meats && extras.meats.length > 0 && (
-                      <div style={{ fontWeight: 700 }}>► CARNES: {extras.meats.join(", ").toUpperCase()}</div>
-                    )}
-                    {extras?.extraMeats && extras.extraMeats.length > 0 && (
-                      <div style={{ fontWeight: 700 }}>► + EXTRAS: {extras.extraMeats.join(", ").toUpperCase()}</div>
-                    )}
-                    {extras?.sides && extras.sides.length > 0 && (
-                      <div style={{ fontWeight: 700 }}>
-                        ► ACOMP: {extras.sides.map((s: string) => {
-                          const sideMap: Record<string, string> = {
-                            macarrao: "MACARRÃO", farofa: "FAROFA",
-                            macaxeira: "MACAXEIRA", salada: "SALADA"
-                          };
-                          return sideMap[s] || s.toUpperCase();
-                        }).join(", ")}
-                      </div>
-                    )}
-                  </div>
-                )}
+             const regularExtras = !isLunch
+               ? (Array.isArray(extras)
+                   ? extras
+                   : (Array.isArray(extras?.regularExtras) ? extras.regularExtras : []))
+               : [];
 
-                {/* Regular Extras */}
-                {!isLunch && extras && Array.isArray(extras) && extras.length > 0 && (
-                  <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
-                    ► EXTRAS: {extras.map((e: any) => e.name.toUpperCase()).join(", ")}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+             return (
+               <div key={idx} style={{ marginBottom: '10px' }}>
+                 <div style={{ 
+                   display: 'flex', 
+                   justifyContent: 'space-between', 
+                   fontWeight: 900, 
+                   fontSize: '14px' 
+                 }}>
+                   <span>
+                     {item.quantity}x {itemName.toUpperCase()}
+                     {item.tapioca_molhada && " (MOLHADA)"}
+                   </span>
+                   <span>R${item.price.toFixed(2)}</span>
+                 </div>
+                 
+                 {/* Selected Variation */}
+                 {!isLunch && extras?.selected_variation && (
+                   <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
+                     ► TIPO: {extras.selected_variation.toUpperCase()}
+                   </div>
+                 )}
+                 
+                 {/* Lunch Details */}
+                 {isLunch && (
+                   <div style={{ paddingLeft: '12px', fontSize: '13px' }}>
+                     {extras?.meats && extras.meats.length > 0 && (
+                       <div style={{ fontWeight: 700 }}>► CARNES: {extras.meats.join(", ").toUpperCase()}</div>
+                     )}
+                     {extras?.extraMeats && extras.extraMeats.length > 0 && (
+                       <div style={{ fontWeight: 700 }}>► + EXTRAS: {extras.extraMeats.join(", ").toUpperCase()}</div>
+                     )}
+                     {extras?.sides && extras.sides.length > 0 && (
+                       <div style={{ fontWeight: 700 }}>
+                         ► ACOMP: {extras.sides.map((s: string) => {
+                           const sideMap: Record<string, string> = {
+                             macarrao: "MACARRÃO", farofa: "FAROFA",
+                             macaxeira: "MACAXEIRA", salada: "SALADA"
+                           };
+                           return sideMap[s] || s.toUpperCase();
+                         }).join(", ")}
+                       </div>
+                     )}
+                   </div>
+                 )}
+
+                 {/* Regular Extras */}
+                 {!isLunch && regularExtras.length > 0 && (
+                   <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
+                     ► EXTRAS: {regularExtras.map((e: any) => e.name.toUpperCase()).join(", ")}
+                   </div>
+                 )}
+               </div>
+             );
+           })}
+         </div>
 
         <div style={{ fontWeight: 900, fontSize: '13px' }}>================================</div>
 
