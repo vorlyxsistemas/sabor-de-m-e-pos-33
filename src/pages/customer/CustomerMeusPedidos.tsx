@@ -280,16 +280,22 @@ const CustomerMeusPedidos = () => {
                   )}
 
                   {/* Cancel Button */}
-                  {cancelability.canCancel && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-destructive border-destructive/50 hover:bg-destructive/10"
-                      onClick={() => handleCancelClick(order)}
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Cancelar Pedido
-                    </Button>
+                  {!isCancelled && !isDelivered && (
+                    cancelability.canCancel ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-destructive border-destructive/50 hover:bg-destructive/10"
+                        onClick={() => handleCancelClick(order)}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancelar Pedido
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center py-1">
+                        {cancelability.reason}
+                      </p>
+                    )
                   )}
 
                   {/* Order Items */}
