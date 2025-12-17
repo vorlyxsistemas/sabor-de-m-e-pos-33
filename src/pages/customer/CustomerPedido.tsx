@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, AlertCircle, Banknote, CreditCard, QrCode, Copy, Check } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -79,6 +80,7 @@ const CustomerPedido = () => {
   const [address, setAddress] = useState('');
   const [bairro, setBairro] = useState('');
   const [reference, setReference] = useState('');
+  const [observations, setObservations] = useState('');
   const [deliveryTax, setDeliveryTax] = useState(0);
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
@@ -131,11 +133,12 @@ const CustomerPedido = () => {
   };
 
   const fetchItems = async () => {
-    const { data } = await supabase
+    const { data } = await (supabase as any)
       .from('items')
       .select('*, extras(*)')
       .eq('category_id', selectedCategory)
-      .eq('available', true);
+      .eq('available', true)
+      .neq('internal_only', true);
     setItems(data || []);
   };
 
@@ -278,6 +281,7 @@ const CustomerPedido = () => {
         source: 'web',
         payment_method: paymentMethod,
         troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
+        observations: observations.trim() || null,
         items: cart.map(item => {
           // Build extras object based on item type
           let extrasData: any;
@@ -536,7 +540,7 @@ const CustomerPedido = () => {
                       <SelectContent>
                         {deliveryZones.map(zone => (
                           <SelectItem key={zone.id} value={zone.bairro}>
-                            {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : '(Grátis)'}
+                            {zone.bairro}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -616,6 +620,18 @@ const CustomerPedido = () => {
                   <p className="text-xs text-muted-foreground">Favorecido: {PIX_OWNER}</p>
                 </div>
               )}
+
+              {/* Observations */}
+              <div>
+                <Label className="text-xs">Observações</Label>
+                <Textarea 
+                  value={observations} 
+                  onChange={e => setObservations(e.target.value)} 
+                  placeholder="Ex: Sem cebola, ponto da carne, etc."
+                  maxLength={500}
+                  rows={2}
+                />
+              </div>
 
               <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
                 {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}

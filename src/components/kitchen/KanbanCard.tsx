@@ -22,6 +22,7 @@ interface Order {
   table_number: number | null;
   created_at: string;
   order_items: OrderItem[];
+  observations?: string | null;
   last_modified_at?: string | null;
 }
 
@@ -133,6 +134,13 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
           <div className="text-[13px] text-muted-foreground break-words leading-tight">
             {itemsSummary}
           </div>
+
+          {/* Observations */}
+          {order.observations && (
+            <div className="text-[12px] text-amber-700 bg-amber-50 px-2 py-1 rounded mt-1 break-words">
+              ⚠️ {order.observations}
+            </div>
+          )}
         </div>
 
       {/* Actions */}

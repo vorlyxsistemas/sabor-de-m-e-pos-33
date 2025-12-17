@@ -38,6 +38,7 @@ interface Order {
   scheduled_for: string | null;
   payment_method: string | null;
   troco: number | null;
+  observations: string | null;
   order_items: OrderItem[];
 }
 
@@ -83,7 +84,7 @@ const Kitchen = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
+      // @ts-ignore - bairro/payment_method/troco/observations columns exist but types are not updated
       const { data, error } = await (supabase as any)
         .from("orders")
         .select(`
@@ -105,6 +106,7 @@ const Kitchen = () => {
           scheduled_for,
           payment_method,
           troco,
+          observations,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
         `)
         .gte("created_at", today.toISOString())
@@ -176,7 +178,7 @@ const Kitchen = () => {
           const shouldPrint = settings?.auto_print_enabled || false;
           
           // Fetch the complete order with items for printing
-          // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
+          // @ts-ignore - bairro/payment_method/troco/observations columns exist but types are not updated
           const { data: newOrder } = await (supabase as any)
             .from("orders")
             .select(`
@@ -197,6 +199,7 @@ const Kitchen = () => {
               scheduled_for,
               payment_method,
               troco,
+              observations,
               order_items(quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)

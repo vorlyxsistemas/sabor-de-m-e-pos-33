@@ -15,6 +15,7 @@ const LUNCH_BASES = [
   { id: "baiao_pequi", name: "Baião de Pequi", price: 14.0, singleMeatPrice: 12.0 },
   { id: "baiao_cremoso", name: "Baião Cremoso", price: 16.0, singleMeatPrice: 14.0 },
   { id: "baiao_simples", name: "Baião Simples", price: 14.0, singleMeatPrice: 12.0 },
+  { id: "somente_arroz", name: "Somente Arroz", price: 12.0, singleMeatPrice: 10.0 },
 ];
 
 // Carnes por dia da semana (0 = Domingo, 6 = Sábado)
@@ -90,14 +91,15 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
       const hour = today.getHours();
       setIsAvailable(hour >= 11 || true); // Permitir pedidos antes, mas mostrar aviso
 
-      // Buscar carnes do dia do banco
-      const { data: dbMeats } = await supabase
+      // Buscar carnes do dia do banco (apenas disponíveis)
+      const { data: dbMeats } = await (supabase as any)
         .from("lunch_menu")
-        .select("meat_name")
-        .eq("weekday", weekday);
+        .select("meat_name, is_available")
+        .eq("weekday", weekday)
+        .neq("is_available", false);
 
       if (dbMeats && dbMeats.length > 0) {
-        setTodayMeats(dbMeats.map(m => m.meat_name));
+        setTodayMeats(dbMeats.map((m: any) => m.meat_name));
       } else {
         // Fallback para carnes definidas no código
         setTodayMeats(MEATS_BY_DAY[weekday] || []);
@@ -388,9 +390,19 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
       {/* Free Sides */}
       <Card>
         <CardHeader className="py-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            5. Acompanhamentos
-            <Badge variant="outline" className="text-xs text-green-600">Grátis</Badge>
+          <CardTitle className="text-sm flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              5. Acompanhamentos
+              <Badge variant="outline" className="text-xs text-green-600">Grátis</Badge>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setSelectedSides(FREE_SIDES.map(s => s.id))}
+            >
+              Selecionar Todos
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
