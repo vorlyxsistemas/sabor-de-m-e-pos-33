@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, Banknote, CreditCard, QrCode } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
 
@@ -58,6 +59,7 @@ const NewOrder = () => {
   const [address, setAddress] = useState('');
   const [bairro, setBairro] = useState('');
   const [reference, setReference] = useState('');
+  const [observations, setObservations] = useState('');
   const [deliveryTax, setDeliveryTax] = useState(0);
   const [deliveryZones, setDeliveryZones] = useState<{ id: string; bairro: string; taxa: number }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
@@ -209,6 +211,7 @@ const NewOrder = () => {
           status: 'pending',
           payment_method: paymentMethod,
           troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
+          observations: observations.trim() || null,
         })
         .select()
         .single();
@@ -511,6 +514,19 @@ const NewOrder = () => {
                   />
                 </div>
               )}
+
+              {/* Observations */}
+              <div>
+                <Label className="text-xs">Observações</Label>
+                <Textarea 
+                  value={observations} 
+                  onChange={e => setObservations(e.target.value)} 
+                  placeholder="Ex: Sem cebola, ponto da carne, etc."
+                  maxLength={500}
+                  rows={2}
+                />
+              </div>
+
               <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
                 {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Finalizar Pedido

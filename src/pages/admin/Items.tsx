@@ -56,6 +56,7 @@ interface Item {
   available: boolean;
   image_url: string | null;
   is_grilled_meat: boolean;
+  internal_only: boolean;
   requires_variation: boolean;
   variation_options: string[] | null;
   extras?: Extra[];
@@ -72,6 +73,7 @@ const defaultItem: Omit<Item, 'id'> = {
   available: true,
   image_url: null,
   is_grilled_meat: false,
+  internal_only: false,
   requires_variation: false,
   variation_options: null,
   extras: [],
@@ -152,6 +154,7 @@ const Items = () => {
       available: item.available,
       image_url: item.image_url,
       is_grilled_meat: item.is_grilled_meat || false,
+      internal_only: item.internal_only || false,
       requires_variation: item.requires_variation || false,
       variation_options: item.variation_options || null,
       extras: item.extras || [],
@@ -227,6 +230,7 @@ const Items = () => {
         available: formData.available,
         image_url: formData.image_url,
         is_grilled_meat: formData.is_grilled_meat,
+        internal_only: formData.internal_only,
         requires_variation: formData.requires_variation,
         variation_options: formData.requires_variation && formData.variation_options?.length 
           ? formData.variation_options 
@@ -570,6 +574,16 @@ const Items = () => {
                 <Switch
                   checked={formData.is_grilled_meat}
                   onCheckedChange={(v) => setFormData({ ...formData, is_grilled_meat: v })}
+                />
+              </div>
+              <div className="flex items-center justify-between border-t pt-3">
+                <div>
+                  <span className="text-sm">Somente Admin/Staff (interno)</span>
+                  <p className="text-xs text-muted-foreground">Item não aparece para clientes</p>
+                </div>
+                <Switch
+                  checked={formData.internal_only}
+                  onCheckedChange={(v) => setFormData({ ...formData, internal_only: v })}
                 />
               </div>
               <div className="flex items-center justify-between">

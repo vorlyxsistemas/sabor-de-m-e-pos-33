@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Plus, Trash2 } from "lucide-react";
 
 const weekdays = [
   { value: 0, label: 'Domingo' },
@@ -23,6 +24,7 @@ interface LunchItem {
   weekday: number;
   meat_name: string;
   meat_price: number;
+  is_available: boolean;
 }
 
 const Lunch = () => {
@@ -37,7 +39,7 @@ const Lunch = () => {
 
   const fetchLunchMenu = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('lunch_menu')
         .select('*')
         .order('weekday');
@@ -47,10 +49,10 @@ const Lunch = () => {
       // Group by weekday
       const grouped: Record<number, LunchItem[]> = {};
       weekdays.forEach(day => {
-        grouped[day.value] = data?.filter(item => item.weekday === day.value) || [];
+        grouped[day.value] = data?.filter((item: any) => item.weekday === day.value) || [];
         // Ensure at least one entry per day
         if (grouped[day.value].length === 0) {
-          grouped[day.value] = [{ weekday: day.value, meat_name: '', meat_price: 0 }];
+          grouped[day.value] = [{ weekday: day.value, meat_name: '', meat_price: 0, is_available: true }];
         }
       });
 
@@ -67,7 +69,7 @@ const Lunch = () => {
     }
   };
 
-  const updateItem = (weekday: number, index: number, field: 'meat_name' | 'meat_price', value: string | number) => {
+  const updateItem = (weekday: number, index: number, field: 'meat_name' | 'meat_price' | 'is_available', value: string | number | boolean) => {
     setLunchMenu(prev => ({
       ...prev,
       [weekday]: prev[weekday].map((item, i) => 
@@ -79,7 +81,7 @@ const Lunch = () => {
   const addItem = (weekday: number) => {
     setLunchMenu(prev => ({
       ...prev,
-      [weekday]: [...prev[weekday], { weekday, meat_name: '', meat_price: 0 }],
+      [weekday]: [...prev[weekday], { weekday, meat_name: '', meat_price: 0, is_available: true }],
     }));
   };
 
@@ -95,10 +97,10 @@ const Lunch = () => {
     setSaving(true);
     try {
       // Delete all existing entries
-      await supabase.from('lunch_menu').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await (supabase as any).from('lunch_menu').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
       // Insert all entries
-      const entries: { weekday: number; meat_name: string; meat_price: number }[] = [];
+      const entries: { weekday: number; meat_name: string; meat_price: number; is_available: boolean }[] = [];
       
       Object.entries(lunchMenu).forEach(([weekday, items]) => {
         items.forEach(item => {
@@ -107,13 +109,14 @@ const Lunch = () => {
               weekday: Number(weekday),
               meat_name: item.meat_name.trim(),
               meat_price: Number(item.meat_price) || 0,
+              is_available: item.is_available !== false,
             });
           }
         });
       });
 
       if (entries.length > 0) {
-        const { error } = await supabase.from('lunch_menu').insert(entries);
+        const { error } = await (supabase as any).from('lunch_menu').insert(entries);
         if (error) throw error;
       }
 
@@ -157,7 +160,7 @@ const Lunch = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {lunchMenu[day.value]?.map((item, index) => (
-                <div key={index} className="space-y-2">
+                <div key={index} className="space-y-2 border-b pb-3 mb-3 last:border-b-0 last:mb-0 last:pb-0">
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Label className="text-xs">Carne {index + 1}</Label>
@@ -179,25 +182,39 @@ const Lunch = () => {
                       />
                     </div>
                   </div>
-                  {index > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs text-destructive"
-                      onClick={() => removeItem(day.value, index)}
-                    >
-                      Remover
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={item.is_available !== false}
+                        onCheckedChange={(v) => updateItem(day.value, index, 'is_available', v)}
+                        id={`available-${day.value}-${index}`}
+                      />
+                      <Label htmlFor={`available-${day.value}-${index}`} className="text-xs cursor-pointer">
+                        Disponível
+                      </Label>
+                    </div>
+                    {index > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs text-destructive gap-1"
+                        onClick={() => removeItem(day.value, index)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Remover
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full h-7 text-xs"
+                className="w-full h-7 text-xs gap-1"
                 onClick={() => addItem(day.value)}
               >
-                + Adicionar carne
+                <Plus className="h-3 w-3" />
+                Adicionar carne
               </Button>
             </CardContent>
           </Card>
