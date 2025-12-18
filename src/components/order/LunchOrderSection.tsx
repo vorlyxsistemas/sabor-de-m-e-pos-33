@@ -15,6 +15,7 @@ const DEFAULT_LUNCH_BASES = [
   { id: "baiao_pequi", name: "Baião de Pequi", price: 14.0, singleMeatPrice: 12.0 },
   { id: "baiao_cremoso", name: "Baião Cremoso", price: 16.0, singleMeatPrice: 14.0 },
   { id: "baiao_simples", name: "Baião Simples", price: 14.0, singleMeatPrice: 12.0 },
+  { id: "baiao_simples", name: "Baião Simples", price: 14.0, singleMeatPrice: 12.0 },
   { id: "somente_arroz", name: "Somente Arroz", price: 12.0, singleMeatPrice: 10.0 },
 ];
 
@@ -29,21 +30,26 @@ const MEATS_BY_DAY: Record<number, string[]> = {
   6: ["Feijoada", "Porco frito/cozido", "Panelada"],
 };
 
-// Acompanhamentos gratuitos
-const FREE_SIDES = [
-  { id: "macarrao", name: "Macarrão" },
-  { id: "farofa", name: "Farofa" },
-  { id: "macaxeira", name: "Macaxeira" },
-  { id: "salada", name: "Salada" },
-];
-
-const EXTRA_MEAT_PRICE = 6.0;
-
 interface LunchBase {
   id: string;
   name: string;
   price: number;
   singleMeatPrice: number;
+}
+
+interface LunchSide {
+  id: string;
+  name: string;
+  price: number;
+  is_free: boolean;
+  available: boolean;
+}
+
+interface ExtraMeatOption {
+  id: string;
+  name: string;
+  price: number;
+  available: boolean;
 }
 
 interface LunchCartItem {
@@ -52,6 +58,7 @@ interface LunchCartItem {
   meats: string[];
   extraMeats: string[];
   sides: string[];
+  paidSides?: { name: string; price: number }[];
   quantity: number;
   totalPrice: number;
 }
@@ -68,16 +75,20 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
   const [weekdayName, setWeekdayName] = useState("");
   const [isAvailable, setIsAvailable] = useState(false);
 
+  const [lunchSides, setLunchSides] = useState<LunchSide[]>([]);
+  const [extraMeatOptions, setExtraMeatOptions] = useState<ExtraMeatOption[]>([]);
+
   // Form state
   const [selectedBase, setSelectedBase] = useState<string>("");
   const [meatOption, setMeatOption] = useState<"both" | "one">("both");
   const [selectedMeats, setSelectedMeats] = useState<string[]>([]);
   const [extraMeats, setExtraMeats] = useState<string[]>([]);
-  const [selectedSides, setSelectedSides] = useState<string[]>([]);
+  const [selectedSides, setSelectedSides] = useState<string[]>([]); // armazenar NOMES, não IDs
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     fetchTodayLunch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchTodayLunch = async () => {
@@ -85,9 +96,9 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
       const today = new Date();
       const weekday = today.getDay();
       const weekdayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-      
+
       setWeekdayName(weekdayNames[weekday]);
-      
+
       // Restaurante funciona segunda a sábado (1-6)
       if (weekday === 0) {
         setIsAvailable(false);
@@ -107,12 +118,14 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         .order("name");
 
       if (!basesError && dbBases && dbBases.length > 0) {
-        setLunchBases(dbBases.map((b: any) => ({
-          id: b.id,
-          name: b.name,
-          price: Number(b.price) || 0,
-          singleMeatPrice: Number(b.price_one_meat) || 0,
-        })));
+        setLunchBases(
+          dbBases.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            price: Number(b.price) || 0,
+            singleMeatPrice: Number(b.price_one_meat) || 0,
+          }))
+        );
       }
       // Se erro ou sem dados, mantém DEFAULT_LUNCH_BASES
 
@@ -135,14 +148,59 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         .select("name")
         .eq("available", true)
         .eq("is_grilled_meat", true);
-      
+
       if (porcoes && porcoes.length > 0) {
         setGrilledMeats(porcoes.map((p: any) => p.name));
+      }
+
+      // Acompanhamentos (fonte única: tabela lunch_sides) - respeitar available=true
+      const { data: sidesData, error: sidesError } = await (supabase as any)
+        .from("lunch_sides")
+        .select("id, name, price, is_free, available")
+        .eq("available", true)
+        .order("name");
+
+      if (sidesError) {
+        console.error("Error fetching lunch_sides:", sidesError);
+        setLunchSides([]);
+      } else {
+        setLunchSides(
+          (sidesData || []).map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            price: Number(s.price) || 0,
+            is_free: !!s.is_free,
+            available: s.available !== false,
+          }))
+        );
+      }
+
+      // Carnes extras (fonte única: tabela extra_meats) - respeitar available=true
+      const { data: extraMeatsData, error: extraMeatsError } = await (supabase as any)
+        .from("extra_meats")
+        .select("id, name, price, available")
+        .eq("available", true)
+        .order("name");
+
+      if (extraMeatsError) {
+        console.error("Error fetching extra_meats:", extraMeatsError);
+        setExtraMeatOptions([]);
+      } else {
+        setExtraMeatOptions(
+          (extraMeatsData || []).map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            price: Number(m.price) || 0,
+            available: m.available !== false,
+          }))
+        );
       }
     } catch (error) {
       console.error("Error fetching lunch:", error);
       const weekday = new Date().getDay();
       setTodayMeats(MEATS_BY_DAY[weekday] || []);
+      setLunchSides([]);
+      setExtraMeatOptions([]);
     } finally {
       setLoading(false);
     }
@@ -151,52 +209,65 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
   // Combine today's meats with grilled meats
   const allAvailableMeats = [...todayMeats, ...grilledMeats];
 
+  const freeSides = lunchSides.filter((s) => s.is_free);
+  const paidSides = lunchSides.filter((s) => !s.is_free);
+
   const toggleMeat = (meat: string, isExtra: boolean = false) => {
     if (isExtra) {
-      setExtraMeats(prev => 
-        prev.includes(meat) ? prev.filter(m => m !== meat) : [...prev, meat]
-      );
-    } else {
-      if (meatOption === "one") {
-        // Allow selecting same meat or different meat
-        setSelectedMeats([meat]);
-      } else {
-        // Allow selecting same meat twice or two different meats
-        setSelectedMeats(prev => {
-          if (prev.length < 2) {
-            return [...prev, meat];
-          }
-          // Replace oldest
-          return [prev[1], meat];
-        });
-      }
+      setExtraMeats((prev) => (prev.includes(meat) ? prev.filter((m) => m !== meat) : [...prev, meat]));
+      return;
     }
+
+    if (meatOption === "one") {
+      // Allow selecting same meat or different meat
+      setSelectedMeats([meat]);
+      return;
+    }
+
+    // Allow selecting same meat twice or two different meats
+    setSelectedMeats((prev) => {
+      if (prev.length < 2) return [...prev, meat];
+      // Replace oldest
+      return [prev[1], meat];
+    });
   };
 
   const removeMeat = (index: number) => {
-    setSelectedMeats(prev => prev.filter((_, i) => i !== index));
+    setSelectedMeats((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const toggleSide = (sideId: string) => {
-    setSelectedSides(prev =>
-      prev.includes(sideId) ? prev.filter(s => s !== sideId) : [...prev, sideId]
-    );
+  const toggleSide = (sideName: string) => {
+    setSelectedSides((prev) => (prev.includes(sideName) ? prev.filter((s) => s !== sideName) : [...prev, sideName]));
   };
 
   const calculatePrice = () => {
-    const base = lunchBases.find(b => b.id === selectedBase);
+    const base = lunchBases.find((b) => b.id === selectedBase);
     if (!base) return 0;
 
-    // Usar preço de 1 carne quando meatOption for "one"
     const basePrice = meatOption === "one" ? base.singleMeatPrice : base.price;
-    const extraMeatsPrice = extraMeats.length * EXTRA_MEAT_PRICE;
-    
-    return (basePrice + extraMeatsPrice) * quantity;
+
+    const extraMeatsPrice = extraMeats.reduce((sum, meatName) => {
+      const option = extraMeatOptions.find((m) => m.name === meatName);
+      return sum + (option?.price ?? 0);
+    }, 0);
+
+    const paidSidesPrice = selectedSides.reduce((sum, sideName) => {
+      const side = lunchSides.find((s) => s.name === sideName);
+      if (side && !side.is_free) return sum + (Number(side.price) || 0);
+      return sum;
+    }, 0);
+
+    return (basePrice + extraMeatsPrice + paidSidesPrice) * quantity;
   };
 
   const handleAddToCart = () => {
-    const base = lunchBases.find(b => b.id === selectedBase);
+    const base = lunchBases.find((b) => b.id === selectedBase);
     if (!base || selectedMeats.length === 0) return;
+
+    const paidSidesSelected = selectedSides
+      .map((name) => lunchSides.find((s) => s.name === name))
+      .filter((s): s is LunchSide => !!s && !s.is_free)
+      .map((s) => ({ name: s.name, price: Number(s.price) || 0 }));
 
     const item: LunchCartItem = {
       type: "lunch",
@@ -204,6 +275,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
       meats: selectedMeats,
       extraMeats,
       sides: selectedSides,
+      paidSides: paidSidesSelected,
       quantity,
       totalPrice: calculatePrice(),
     };
@@ -231,9 +303,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
     return (
       <Card className="border-destructive/50 bg-destructive/5">
         <CardContent className="py-6 text-center">
-          <p className="text-muted-foreground">
-            Não funcionamos aos domingos. Volte amanhã!
-          </p>
+          <p className="text-muted-foreground">Não funcionamos aos domingos. Volte amanhã!</p>
         </CardContent>
       </Card>
     );
@@ -259,7 +329,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         </CardHeader>
         <CardContent className="space-y-2">
           <RadioGroup value={selectedBase} onValueChange={setSelectedBase}>
-            {lunchBases.map(base => {
+            {lunchBases.map((base) => {
               const displayPrice = meatOption === "one" ? base.singleMeatPrice : base.price;
               return (
                 <div key={base.id} className="flex items-center justify-between">
@@ -269,9 +339,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
                       {base.name}
                     </Label>
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    R$ {displayPrice.toFixed(2)}
-                  </span>
+                  <span className="text-sm text-muted-foreground">R$ {displayPrice.toFixed(2)}</span>
                 </div>
               );
             })}
@@ -285,12 +353,15 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
           <CardTitle className="text-sm">2. Quantidade de Carnes (incluídas)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <RadioGroup value={meatOption} onValueChange={(v: "both" | "one") => {
-            setMeatOption(v);
-            if (v === "one" && selectedMeats.length > 1) {
-              setSelectedMeats([selectedMeats[0]]);
-            }
-          }}>
+          <RadioGroup
+            value={meatOption}
+            onValueChange={(v: "both" | "one") => {
+              setMeatOption(v);
+              if (v === "one" && selectedMeats.length > 1) {
+                setSelectedMeats([selectedMeats[0]]);
+              }
+            }}
+          >
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="both" id="both" />
               <Label htmlFor="both" className="text-sm cursor-pointer">
@@ -321,9 +392,9 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
               <p className="text-xs font-medium text-muted-foreground">Carnes selecionadas:</p>
               <div className="flex flex-wrap gap-1">
                 {selectedMeats.map((meat, idx) => (
-                  <Badge 
-                    key={idx} 
-                    variant="secondary" 
+                  <Badge
+                    key={idx}
+                    variant="secondary"
                     className="cursor-pointer hover:bg-destructive/20"
                     onClick={() => removeMeat(idx)}
                   >
@@ -339,14 +410,17 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Carnes do dia:</p>
               <div className="space-y-2">
-                {todayMeats.map(meat => (
+                {todayMeats.map((meat) => (
                   <Button
                     key={meat}
                     variant="outline"
                     size="sm"
                     className="w-full justify-start"
                     onClick={() => toggleMeat(meat)}
-                    disabled={meatOption === "one" && selectedMeats.length >= 1 || meatOption === "both" && selectedMeats.length >= 2}
+                    disabled={
+                      (meatOption === "one" && selectedMeats.length >= 1) ||
+                      (meatOption === "both" && selectedMeats.length >= 2)
+                    }
                   >
                     <Plus className="h-3 w-3 mr-2" />
                     {meat}
@@ -361,14 +435,17 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Carnes assadas:</p>
               <div className="space-y-2">
-                {grilledMeats.map(meat => (
+                {grilledMeats.map((meat) => (
                   <Button
                     key={meat}
                     variant="outline"
                     size="sm"
                     className="w-full justify-start"
                     onClick={() => toggleMeat(meat)}
-                    disabled={meatOption === "one" && selectedMeats.length >= 1 || meatOption === "both" && selectedMeats.length >= 2}
+                    disabled={
+                      (meatOption === "one" && selectedMeats.length >= 1) ||
+                      (meatOption === "both" && selectedMeats.length >= 2)
+                    }
                   >
                     <Plus className="h-3 w-3 mr-2" />
                     {meat}
@@ -379,9 +456,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
           )}
 
           {allAvailableMeats.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma carne disponível hoje
-            </p>
+            <p className="text-sm text-muted-foreground">Nenhuma carne disponível hoje</p>
           )}
         </CardContent>
       </Card>
@@ -391,56 +466,112 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         <CardHeader className="py-3">
           <CardTitle className="text-sm flex items-center gap-2">
             4. Carne Extra (opcional)
-            <Badge variant="secondary" className="text-xs">+R$ 6,00 cada</Badge>
+            <Badge variant="outline" className="text-xs">
+              Preço varia
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {allAvailableMeats.map(meat => (
-            <div key={`extra-${meat}`} className="flex items-center space-x-2">
-              <Checkbox
-                id={`extra-${meat}`}
-                checked={extraMeats.includes(meat)}
-                onCheckedChange={() => toggleMeat(meat, true)}
-              />
-              <Label htmlFor={`extra-${meat}`} className="text-sm cursor-pointer">
-                + {meat}
-              </Label>
-            </div>
-          ))}
+          {extraMeatOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma carne extra disponível</p>
+          ) : (
+            extraMeatOptions.map((meat) => (
+              <div key={`extra-${meat.id}`} className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`extra-${meat.id}`}
+                    checked={extraMeats.includes(meat.name)}
+                    onCheckedChange={() => toggleMeat(meat.name, true)}
+                  />
+                  <Label htmlFor={`extra-${meat.id}`} className="text-sm cursor-pointer">
+                    + {meat.name}
+                  </Label>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  +R$ {meat.price.toFixed(2)}
+                </Badge>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
-      {/* Free Sides */}
+      {/* Sides */}
       <Card>
         <CardHeader className="py-3">
           <CardTitle className="text-sm flex items-center justify-between">
             <div className="flex items-center gap-2">
-              5. Acompanhamentos
-              <Badge variant="outline" className="text-xs text-green-600">Grátis</Badge>
+              <span>5. Acompanhamentos</span>
+              {freeSides.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  Grátis
+                </Badge>
+              )}
+              {paidSides.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  Pagos
+                </Badge>
+              )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setSelectedSides(FREE_SIDES.map(s => s.id))}
-            >
-              Selecionar Todos
-            </Button>
+            {freeSides.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setSelectedSides(freeSides.map((s) => s.name))}
+              >
+                Selecionar Grátis
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {FREE_SIDES.map(side => (
-            <div key={side.id} className="flex items-center space-x-2">
-              <Checkbox
-                id={side.id}
-                checked={selectedSides.includes(side.id)}
-                onCheckedChange={() => toggleSide(side.id)}
-              />
-              <Label htmlFor={side.id} className="text-sm cursor-pointer">
-                {side.name}
-              </Label>
-            </div>
-          ))}
+        <CardContent className="space-y-3">
+          {lunchSides.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum acompanhamento disponível</p>
+          ) : (
+            <>
+              {freeSides.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Grátis</p>
+                  {freeSides.map((side) => (
+                    <div key={side.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`side-${side.id}`}
+                        checked={selectedSides.includes(side.name)}
+                        onCheckedChange={() => toggleSide(side.name)}
+                      />
+                      <Label htmlFor={`side-${side.id}`} className="text-sm cursor-pointer">
+                        {side.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {paidSides.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Pagos</p>
+                  {paidSides.map((side) => (
+                    <div key={side.id} className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`side-${side.id}`}
+                          checked={selectedSides.includes(side.name)}
+                          onCheckedChange={() => toggleSide(side.name)}
+                        />
+                        <Label htmlFor={`side-${side.id}`} className="text-sm cursor-pointer">
+                          {side.name}
+                        </Label>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        +R$ {side.price.toFixed(2)}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -472,16 +603,10 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
 
           <div className="flex items-center justify-between pt-2 border-t">
             <span className="font-medium">Total</span>
-            <span className="text-lg font-bold text-primary">
-              R$ {calculatePrice().toFixed(2)}
-            </span>
+            <span className="text-lg font-bold text-primary">R$ {calculatePrice().toFixed(2)}</span>
           </div>
 
-          <Button
-            className="w-full"
-            onClick={handleAddToCart}
-            disabled={!selectedBase || selectedMeats.length === 0}
-          >
+          <Button className="w-full" onClick={handleAddToCart} disabled={!selectedBase || selectedMeats.length === 0}>
             <Plus className="h-4 w-4 mr-2" />
             Adicionar ao Pedido
           </Button>
