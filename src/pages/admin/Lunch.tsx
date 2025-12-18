@@ -390,22 +390,6 @@ const Lunch = () => {
             </CardContent>
           </Card>
 
-          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm">
-            <p className="font-medium text-amber-800">Nota sobre tabela lunch_bases:</p>
-            <p className="text-amber-700 mt-1">
-              Execute este SQL no Supabase para criar a tabela de bases:
-            </p>
-            <pre className="mt-2 p-2 bg-white rounded text-xs overflow-x-auto">
-{`CREATE TABLE IF NOT EXISTS lunch_bases (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  price NUMERIC(10,2) DEFAULT 0,
-  price_one_meat NUMERIC(10,2) DEFAULT 0,
-  is_available BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP DEFAULT NOW()
-);`}
-            </pre>
-          </div>
         </TabsContent>
       </Tabs>
     </AdminLayout>
