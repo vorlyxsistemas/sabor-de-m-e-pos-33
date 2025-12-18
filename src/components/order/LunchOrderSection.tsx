@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Plus, Minus, UtensilsCrossed } from "lucide-react";
 
-// Bases fixas do almoço com preços (2 carnes e 1 carne)
-const LUNCH_BASES = [
+// Fallback bases (usado apenas se tabela não existir)
+const DEFAULT_LUNCH_BASES = [
   { id: "arroz_feijao", name: "Arroz e Feijão Carioca", price: 14.0, singleMeatPrice: 12.0 },
   { id: "baiao_fava", name: "Baião de Fava", price: 14.0, singleMeatPrice: 12.0 },
   { id: "baiao_pequi", name: "Baião de Pequi", price: 14.0, singleMeatPrice: 12.0 },
@@ -18,15 +18,15 @@ const LUNCH_BASES = [
   { id: "somente_arroz", name: "Somente Arroz", price: 12.0, singleMeatPrice: 10.0 },
 ];
 
-// Carnes por dia da semana (0 = Domingo, 6 = Sábado)
+// Carnes por dia da semana (fallback)
 const MEATS_BY_DAY: Record<number, string[]> = {
-  0: [], // Domingo - não funciona
-  1: ["Lasanha de frango", "Picadinho"], // Segunda
-  2: ["Frango ao molho", "Carne de sol"], // Terça
-  3: ["Almôndega", "Costela"], // Quarta
-  4: ["Lasanha de carne", "Bife ao molho"], // Quinta
-  5: ["Peixe frito", "Peixe cozido", "Fígado acebolado"], // Sexta
-  6: ["Feijoada", "Porco frito/cozido", "Panelada"], // Sábado
+  0: [],
+  1: ["Lasanha de frango", "Picadinho"],
+  2: ["Frango ao molho", "Carne de sol"],
+  3: ["Almôndega", "Costela"],
+  4: ["Lasanha de carne", "Bife ao molho"],
+  5: ["Peixe frito", "Peixe cozido", "Fígado acebolado"],
+  6: ["Feijoada", "Porco frito/cozido", "Panelada"],
 };
 
 // Acompanhamentos gratuitos
@@ -38,6 +38,13 @@ const FREE_SIDES = [
 ];
 
 const EXTRA_MEAT_PRICE = 6.0;
+
+interface LunchBase {
+  id: string;
+  name: string;
+  price: number;
+  singleMeatPrice: number;
+}
 
 interface LunchCartItem {
   type: "lunch";
@@ -55,6 +62,7 @@ interface LunchOrderSectionProps {
 
 export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
   const [loading, setLoading] = useState(true);
+  const [lunchBases, setLunchBases] = useState<LunchBase[]>(DEFAULT_LUNCH_BASES);
   const [todayMeats, setTodayMeats] = useState<string[]>([]);
   const [grilledMeats, setGrilledMeats] = useState<string[]>([]);
   const [weekdayName, setWeekdayName] = useState("");
@@ -89,7 +97,24 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
 
       // Verificar horário (almoço a partir das 11h)
       const hour = today.getHours();
-      setIsAvailable(hour >= 11 || true); // Permitir pedidos antes, mas mostrar aviso
+      setIsAvailable(hour >= 11 || true);
+
+      // Buscar bases do almoço do banco (apenas disponíveis)
+      const { data: dbBases, error: basesError } = await (supabase as any)
+        .from("lunch_bases")
+        .select("id, name, price, price_one_meat, is_available")
+        .eq("is_available", true)
+        .order("name");
+
+      if (!basesError && dbBases && dbBases.length > 0) {
+        setLunchBases(dbBases.map((b: any) => ({
+          id: b.id,
+          name: b.name,
+          price: Number(b.price) || 0,
+          singleMeatPrice: Number(b.price_one_meat) || 0,
+        })));
+      }
+      // Se erro ou sem dados, mantém DEFAULT_LUNCH_BASES
 
       // Buscar carnes do dia do banco (apenas disponíveis)
       const { data: dbMeats } = await (supabase as any)
@@ -101,7 +126,6 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
       if (dbMeats && dbMeats.length > 0) {
         setTodayMeats(dbMeats.map((m: any) => m.meat_name));
       } else {
-        // Fallback para carnes definidas no código
         setTodayMeats(MEATS_BY_DAY[weekday] || []);
       }
 
@@ -117,7 +141,6 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
       }
     } catch (error) {
       console.error("Error fetching lunch:", error);
-      // Use default meats
       const weekday = new Date().getDay();
       setTodayMeats(MEATS_BY_DAY[weekday] || []);
     } finally {
@@ -161,7 +184,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
   };
 
   const calculatePrice = () => {
-    const base = LUNCH_BASES.find(b => b.id === selectedBase);
+    const base = lunchBases.find(b => b.id === selectedBase);
     if (!base) return 0;
 
     // Usar preço de 1 carne quando meatOption for "one"
@@ -172,7 +195,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
   };
 
   const handleAddToCart = () => {
-    const base = LUNCH_BASES.find(b => b.id === selectedBase);
+    const base = lunchBases.find(b => b.id === selectedBase);
     if (!base || selectedMeats.length === 0) return;
 
     const item: LunchCartItem = {
@@ -236,7 +259,7 @@ export const LunchOrderSection = ({ onAddToCart }: LunchOrderSectionProps) => {
         </CardHeader>
         <CardContent className="space-y-2">
           <RadioGroup value={selectedBase} onValueChange={setSelectedBase}>
-            {LUNCH_BASES.map(base => {
+            {lunchBases.map(base => {
               const displayPrice = meatOption === "one" ? base.singleMeatPrice : base.price;
               return (
                 <div key={base.id} className="flex items-center justify-between">
