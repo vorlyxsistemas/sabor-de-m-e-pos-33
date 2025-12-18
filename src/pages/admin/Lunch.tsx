@@ -106,34 +106,37 @@ const Lunch = () => {
         setLunchBases(basesData || []);
       }
 
-      // Fetch lunch sides
-      const { data: sidesData } = await (supabase as any)
+      // Fetch lunch sides - always show DB data for admin management
+      const { data: sidesData, error: sidesError } = await (supabase as any)
         .from('lunch_sides')
         .select('*')
         .order('name');
 
-      if (sidesData && sidesData.length > 0) {
-        setLunchSides(sidesData);
-      } else {
+      if (sidesError) {
+        console.error('Error fetching lunch_sides:', sidesError);
+        // Use defaults if table doesn't exist
         setLunchSides([
           { name: 'Macarrão', price: 0, is_free: true, available: true },
           { name: 'Farofa', price: 0, is_free: true, available: true },
           { name: 'Macaxeira', price: 0, is_free: true, available: true },
           { name: 'Salada', price: 0, is_free: true, available: true },
         ]);
+      } else {
+        // Use DB data even if empty - admin can add items
+        setLunchSides(sidesData || []);
       }
 
-      // Fetch extra meats
-      const { data: extraMeatsData } = await (supabase as any)
+      // Fetch extra meats - always show DB data for admin management
+      const { data: extraMeatsData, error: extraMeatsError } = await (supabase as any)
         .from('extra_meats')
         .select('*')
         .order('name');
 
-      if (extraMeatsData && extraMeatsData.length > 0) {
-        setExtraMeats(extraMeatsData);
-      } else {
-        setExtraMeats([]);
+      if (extraMeatsError) {
+        console.error('Error fetching extra_meats:', extraMeatsError);
       }
+      // Always use DB data (show all items including unavailable for admin management)
+      setExtraMeats(extraMeatsData || []);
 
     } catch (error) {
       console.error('Error fetching data:', error);

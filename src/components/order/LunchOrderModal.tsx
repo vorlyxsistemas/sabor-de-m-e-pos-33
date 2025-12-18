@@ -151,25 +151,31 @@ export function LunchOrderModal({ open, onOpenChange, onAddToOrder }: LunchOrder
         setGrilledMeats(porcoes.map((p: any) => p.name));
       }
 
-      // Fetch lunch sides from DB
-      const { data: sidesData } = await (supabase as any)
+      // Fetch lunch sides from DB - always use DB data
+      const { data: sidesData, error: sidesError } = await (supabase as any)
         .from("lunch_sides")
         .select("*")
         .eq("available", true)
         .order("name");
 
-      if (sidesData && sidesData.length > 0) {
-        setLunchSides(sidesData);
+      if (sidesError) {
+        console.error("Error fetching lunch_sides:", sidesError);
+        // Keep defaults if table doesn't exist
+      } else if (sidesData) {
+        // Always use DB data, even if empty (keeps defaults only if error)
+        setLunchSides(sidesData.length > 0 ? sidesData : DEFAULT_FREE_SIDES);
       }
 
-      // Fetch extra meats from DB
-      const { data: extraMeatsData } = await (supabase as any)
+      // Fetch extra meats from DB - always use DB data
+      const { data: extraMeatsData, error: extraMeatsError } = await (supabase as any)
         .from("extra_meats")
         .select("*")
         .eq("available", true)
         .order("name");
 
-      if (extraMeatsData && extraMeatsData.length > 0) {
+      if (extraMeatsError) {
+        console.error("Error fetching extra_meats:", extraMeatsError);
+      } else if (extraMeatsData) {
         setExtraMeatsOptions(extraMeatsData);
       }
     } catch (error) {
