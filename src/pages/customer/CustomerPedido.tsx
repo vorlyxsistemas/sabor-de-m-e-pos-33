@@ -46,6 +46,7 @@ interface CartItem {
   lunchMeats?: string[];
   lunchExtraMeats?: string[];
   lunchSides?: string[];
+  lunchPaidSides?: { name: string; price: number }[];
 }
 
 interface LunchCartItem {
@@ -54,6 +55,7 @@ interface LunchCartItem {
   meats: string[];
   extraMeats: string[];
   sides: string[];
+  paidSides?: { name: string; price: number }[];
   quantity: number;
   totalPrice: number;
 }
@@ -166,19 +168,23 @@ const CustomerPedido = () => {
   };
 
   const addLunchToCart = (lunchItem: LunchCartItem) => {
-    setCart([...cart, {
-      item_id: null,
-      name: `Almoço - ${lunchItem.base.name}`,
-      quantity: lunchItem.quantity,
-      price: lunchItem.totalPrice / lunchItem.quantity,
-      extras: lunchItem.extraMeats.map(m => ({ name: m, price: 6 })),
-      tapioca_molhada: false,
-      isLunch: true,
-      lunchBase: lunchItem.base,
-      lunchMeats: lunchItem.meats,
-      lunchExtraMeats: lunchItem.extraMeats,
-      lunchSides: lunchItem.sides,
-    }]);
+    setCart([
+      ...cart,
+      {
+        item_id: null,
+        name: `Almoço - ${lunchItem.base.name}`,
+        quantity: lunchItem.quantity,
+        price: lunchItem.totalPrice / lunchItem.quantity,
+        extras: lunchItem.extraMeats.map((m) => ({ name: m, price: 6 })),
+        tapioca_molhada: false,
+        isLunch: true,
+        lunchBase: lunchItem.base,
+        lunchMeats: lunchItem.meats,
+        lunchExtraMeats: lunchItem.extraMeats,
+        lunchSides: lunchItem.sides,
+        lunchPaidSides: lunchItem.paidSides || [],
+      },
+    ]);
 
     toast({ title: "Almoço adicionado ao carrinho!" });
   };
@@ -286,14 +292,15 @@ const CustomerPedido = () => {
           // Build extras object based on item type
           let extrasData: any;
           if (item.isLunch) {
-            extrasData = {
-              type: "lunch",
-              base: item.lunchBase,
-              meats: item.lunchMeats,
-              extraMeats: item.lunchExtraMeats,
-              sides: item.lunchSides,
-              regularExtras: item.extras
-            };
+              extrasData = {
+                type: "lunch",
+                base: item.lunchBase,
+                meats: item.lunchMeats,
+                extraMeats: item.lunchExtraMeats,
+                sides: item.lunchSides,
+                paidSides: item.lunchPaidSides,
+                regularExtras: item.extras,
+              };
           } else {
             const parsedVariation = (() => {
               const match = item.name.match(/\(([^)]+)\)\s*$/);
@@ -442,13 +449,22 @@ const CustomerPedido = () => {
                         )}
                         {item.isLunch && item.lunchSides && item.lunchSides.length > 0 && (
                           <p className="text-xs text-green-600">
-                            Acomp: {item.lunchSides.map(s => {
-                              const sideMap: Record<string, string> = {
-                                macarrao: "Macarrão", farofa: "Farofa", 
-                                macaxeira: "Macaxeira", salada: "Salada"
-                              };
-                              return sideMap[s] || s;
-                            }).join(", ")}
+                            Acomp: {item.lunchSides
+                              .map((s) => {
+                                const sideMap: Record<string, string> = {
+                                  macarrao: "Macarrão",
+                                  farofa: "Farofa",
+                                  macaxeira: "Macaxeira",
+                                  salada: "Salada",
+                                };
+                                return sideMap[s] || s;
+                              })
+                              .join(", ")}
+                          </p>
+                        )}
+                        {item.isLunch && item.lunchPaidSides && item.lunchPaidSides.length > 0 && (
+                          <p className="text-xs text-orange-600">
+                            + Pagos: {item.lunchPaidSides.map((s) => s.name).join(", ")}
                           </p>
                         )}
                         {!item.isLunch && item.extras.length > 0 && (
