@@ -34,6 +34,7 @@ interface Order {
   scheduled_for: string | null;
   payment_method: string | null;
   troco: number | null;
+  observations?: string | null;
   order_items: OrderItem[];
 }
 
@@ -155,6 +156,15 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                 </div>
               )}
             </div>
+
+
+          {/* Observações */}
+          {order.observations && (
+            <div className="bg-accent/20 border border-border/50 rounded-lg p-3 space-y-1">
+              <div className="text-sm font-medium">Observações</div>
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words">{order.observations}</p>
+            </div>
+          )}
 
           {/* Items */}
           <div className="space-y-2">
