@@ -88,6 +88,7 @@ const updateOrderItemSchema = z.object({
 })
 
 const updateOrderBodySchema = z.object({
+  id: uuidSchema,
   items: z.array(updateOrderItemSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
   observations: z.string().max(500).optional().nullable(),
   subtotal: z.number().min(0).max(99999.99),
@@ -774,17 +775,6 @@ Deno.serve(async (req) => {
         )
       }
 
-      const orderId = url.searchParams.get('id')
-      
-      // Validate orderId
-      const orderIdResult = uuidSchema.safeParse(orderId)
-      if (!orderIdResult.success) {
-        return new Response(
-          JSON.stringify({ error: 'ID do pedido inválido' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
       const rawBody = await req.json()
       const bodyResult = updateOrderBodySchema.safeParse(rawBody)
       if (!bodyResult.success) {
@@ -797,6 +787,7 @@ Deno.serve(async (req) => {
       }
 
       const body = bodyResult.data
+      const orderId = body.id
       console.log('Updating order with items:', orderId, JSON.stringify(body))
 
       // Check order exists and is not cancelled

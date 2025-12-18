@@ -215,9 +215,10 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
         tapioca_molhada: item.tapioca_molhada || false,
       }));
 
-      const { data, error } = await supabase.functions.invoke(`orders?id=${order.id}`, {
+      const { data, error } = await supabase.functions.invoke("orders", {
         method: "PUT",
         body: {
+          id: order.id,
           items: orderItemsPayload,
           observations,
           subtotal,
