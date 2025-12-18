@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.orders]
 verify_jwt = false
 
+[functions.orders-update]
+verify_jwt = false
+
 [functions.ai-session]
 verify_jwt = false
 
