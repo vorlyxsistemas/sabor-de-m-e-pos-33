@@ -79,6 +79,21 @@ const updateOrderStatusSchema = z.object({
   status: z.enum(['pending', 'A_PREPARAR', 'PREPARANDO', 'PRONTO', 'ENTREGUE', 'cancelled']),
 })
 
+const updateOrderItemSchema = z.object({
+  item_id: z.union([uuidSchema, z.null()]).optional(),
+  quantity: z.number().int().min(1).max(50),
+  price: z.number().min(0).max(9999.99),
+  extras: z.any().optional().default([]),
+  tapioca_molhada: z.boolean().optional().default(false),
+})
+
+const updateOrderBodySchema = z.object({
+  items: z.array(updateOrderItemSchema).min(1, 'Pedido deve ter pelo menos um item').max(30),
+  observations: z.string().max(500).optional().nullable(),
+  subtotal: z.number().min(0).max(99999.99),
+  total: z.number().min(0).max(99999.99),
+})
+
 const cancelOrderSchema = z.object({
   id: uuidSchema,
   reason: z.string().trim().min(1, 'Motivo é obrigatório').max(500, 'Motivo muito longo'),
@@ -746,6 +761,120 @@ Deno.serve(async (req) => {
           }
         }),
         { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // PUT - Update order with items (REQUIRES ADMIN/STAFF AUTH)
+    if (req.method === 'PUT') {
+      const { user, error: authError } = await getAuthenticatedStaffUser(req, supabase);
+      if (authError) {
+        return new Response(
+          JSON.stringify({ error: authError }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const orderId = url.searchParams.get('id')
+      
+      // Validate orderId
+      const orderIdResult = uuidSchema.safeParse(orderId)
+      if (!orderIdResult.success) {
+        return new Response(
+          JSON.stringify({ error: 'ID do pedido inválido' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const rawBody = await req.json()
+      const bodyResult = updateOrderBodySchema.safeParse(rawBody)
+      if (!bodyResult.success) {
+        const errors = bodyResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')
+        console.error('Update order validation error:', errors)
+        return new Response(
+          JSON.stringify({ error: `Dados inválidos: ${errors}` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const body = bodyResult.data
+      console.log('Updating order with items:', orderId, JSON.stringify(body))
+
+      // Check order exists and is not cancelled
+      const { data: existingOrder, error: orderCheckError } = await supabase
+        .from('orders')
+        .select('id, status')
+        .eq('id', orderId)
+        .maybeSingle()
+
+      if (orderCheckError) throw orderCheckError
+      if (!existingOrder) {
+        return new Response(
+          JSON.stringify({ error: 'Pedido não encontrado' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (existingOrder.status === 'cancelled') {
+        return new Response(
+          JSON.stringify({ error: 'Não é possível editar pedidos cancelados' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      // Delete existing items (using service role, bypasses RLS)
+      const { error: deleteError } = await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderId)
+
+      if (deleteError) {
+        console.error('Error deleting order items:', deleteError)
+        throw deleteError
+      }
+
+      // Insert new items
+      const orderItemsToInsert = body.items.map(item => ({
+        order_id: orderId,
+        item_id: item.item_id || null,
+        quantity: item.quantity,
+        price: item.price,
+        extras: item.extras || [],
+        tapioca_molhada: item.tapioca_molhada || false,
+      }))
+
+      const { error: insertError } = await supabase
+        .from('order_items')
+        .insert(orderItemsToInsert)
+
+      if (insertError) {
+        console.error('Error inserting order items:', insertError)
+        throw insertError
+      }
+
+      // Update order totals and observations
+      const { data: updatedOrder, error: updateError } = await supabase
+        .from('orders')
+        .update({
+          subtotal: body.subtotal,
+          total: body.total,
+          observations: body.observations || null,
+          last_modified_at: new Date().toISOString(),
+          last_modified_by: user.id,
+        })
+        .eq('id', orderId)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('Error updating order:', updateError)
+        throw updateError
+      }
+
+      console.log('Order updated successfully:', orderId)
+
+      return new Response(
+        JSON.stringify({ data: updatedOrder, message: 'Pedido atualizado com sucesso' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 

@@ -204,18 +204,10 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
 
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       const { subtotal, total } = calculateTotals();
 
-      const { error: deleteError } = await supabase
-        .from("order_items")
-        .delete()
-        .eq("order_id", order.id);
-
-      if (deleteError) throw deleteError;
-
-      const orderItemsToInsert = items.map(item => ({
-        order_id: order.id,
+      // Use edge function to update order (bypasses RLS for delete)
+      const orderItemsPayload = items.map(item => ({
         item_id: item.item_id || item.item?.id || null,
         quantity: item.quantity,
         price: item.price || item.item?.price || 0,
@@ -223,24 +215,19 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
         tapioca_molhada: item.tapioca_molhada || false,
       }));
 
-      const { error: insertError } = await supabase
-        .from("order_items")
-        .insert(orderItemsToInsert);
-
-      if (insertError) throw insertError;
-
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({
+      const { data, error } = await supabase.functions.invoke(`orders?id=${order.id}`, {
+        method: "PUT",
+        body: {
+          items: orderItemsPayload,
+          observations,
           subtotal,
           total,
-          observations,
-          last_modified_at: new Date().toISOString(),
-          last_modified_by: user?.id || null,
-        } as any)
-        .eq("id", order.id);
+        },
+      });
 
-      if (updateError) throw updateError;
+      // Check if the response contains an error
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast({ title: "Pedido atualizado com sucesso!" });
       onOrderUpdated();
