@@ -6,12 +6,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { KanbanCard } from "@/components/kitchen/KanbanCard";
 import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
+import { EditOrderModal } from "@/components/kitchen/EditOrderModal";
 import { PrintReceipt } from "@/components/kitchen/PrintReceipt";
 import { printReceipt } from "@/lib/printReceipt";
 
 type OrderStatus = "pending" | "preparing" | "ready" | "delivered" | "cancelled";
 
 interface OrderItem {
+  item_id?: string | null;
   quantity: number;
   price: number;
   extras: any;
@@ -63,6 +65,8 @@ const Kitchen = () => {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const printedOrdersRef = useRef<Set<string>>(new Set());
@@ -107,7 +111,7 @@ const Kitchen = () => {
           payment_method,
           troco,
           observations,
-          order_items(quantity, price, extras, tapioca_molhada, item:items(name))
+          order_items(item_id, quantity, price, extras, tapioca_molhada, item:items(name))
         `)
         .gte("created_at", today.toISOString())
         .neq("status", "cancelled")
@@ -127,37 +131,40 @@ const Kitchen = () => {
   }, [toast]);
 
   // Auto-print new pending orders (only if enabled)
-  const autoPrintPendingOrders = useCallback((newOrders: Order[], shouldPrint: boolean) => {
-    if (!shouldPrint) {
-      console.log("Auto-print disabled, skipping");
-      return;
-    }
-
-    newOrders.forEach((order) => {
-      if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
-        printedOrdersRef.current.add(order.id);
-        console.log("Auto-printing order:", order.id);
-        
-        // Small delay to ensure order data is complete
-        setTimeout(() => {
-          try {
-            printReceipt(order);
-            toast({
-              title: "Comanda impressa",
-              description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
-            });
-          } catch (error) {
-            console.error("Erro ao imprimir comanda:", error);
-            toast({
-              title: "Erro na impressão",
-              description: "Não foi possível imprimir a comanda automaticamente",
-              variant: "destructive",
-            });
-          }
-        }, 500);
+  const autoPrintPendingOrders = useCallback(
+    (newOrders: Order[], shouldPrint: boolean) => {
+      if (!shouldPrint) {
+        console.log("Auto-print disabled, skipping");
+        return;
       }
-    });
-  }, [toast]);
+
+      newOrders.forEach((order) => {
+        if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
+          printedOrdersRef.current.add(order.id);
+          console.log("Auto-printing order:", order.id);
+
+          // Small delay to ensure order data is complete
+          setTimeout(() => {
+            try {
+              printReceipt(order);
+              toast({
+                title: "Comanda impressa",
+                description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
+              });
+            } catch (error) {
+              console.error("Erro ao imprimir comanda:", error);
+              toast({
+                title: "Erro na impressão",
+                description: "Não foi possível imprimir a comanda automaticamente",
+                variant: "destructive",
+              });
+            }
+          }, 500);
+        }
+      });
+    },
+    [toast]
+  );
 
   useEffect(() => {
     fetchSettings();
@@ -176,7 +183,7 @@ const Kitchen = () => {
             method: "GET",
           });
           const shouldPrint = settings?.auto_print_enabled || false;
-          
+
           // Fetch the complete order with items for printing
           // @ts-ignore - bairro/payment_method/troco/observations columns exist but types are not updated
           const { data: newOrder } = await (supabase as any)
@@ -200,24 +207,20 @@ const Kitchen = () => {
               payment_method,
               troco,
               observations,
-              order_items(quantity, price, extras, tapioca_molhada, item:items(name))
+              order_items(item_id, quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)
             .single();
-          
+
           if (newOrder && (newOrder as any).status === "pending") {
             autoPrintPendingOrders([newOrder as Order], shouldPrint);
           }
           fetchOrders();
         }
       )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orders" },
-        () => {
-          fetchOrders();
-        }
-      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => {
+        fetchOrders();
+      })
       .subscribe();
 
     return () => {
@@ -233,17 +236,12 @@ const Kitchen = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from("orders")
-        .update({ status: nextStatus })
-        .eq("id", orderId);
+      const { error } = await supabase.from("orders").update({ status: nextStatus }).eq("id", orderId);
 
       if (error) throw error;
 
       // Optimistic update
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-      );
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
 
       toast({
         title: "Status atualizado!",
@@ -261,16 +259,20 @@ const Kitchen = () => {
 
   const cancelOrder = async (orderId: string, reason: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const { error } = await supabase
         .from("orders")
-        .update({ 
-          status: "cancelled",
-          cancel_reason: reason,
-          cancelled_at: new Date().toISOString(),
-          cancelled_by: user?.id || null
-        } as any)
+        .update(
+          {
+            status: "cancelled",
+            cancel_reason: reason,
+            cancelled_at: new Date().toISOString(),
+            cancelled_by: user?.id || null,
+          } as any
+        )
         .eq("id", orderId);
 
       if (error) throw error;
@@ -295,6 +297,11 @@ const Kitchen = () => {
   const handleViewDetails = (order: Order) => {
     setSelectedOrder(order);
     setShowDetails(true);
+  };
+
+  const handleEditOrder = (order: Order) => {
+    setEditOrder(order);
+    setShowEditModal(true);
   };
 
   const handlePrint = (order: Order) => {
@@ -336,14 +343,14 @@ const Kitchen = () => {
                     onAdvance={() => moveOrder(order.id, order.status)}
                     onViewDetails={() => handleViewDetails(order)}
                     onCancel={cancelOrder}
+                    onEdit={() => handleEditOrder(order)}
                     canAdvance={col.status !== "delivered"}
                     canCancel={order.status === "pending"}
+                    canEdit={order.status !== "cancelled"}
                   />
                 ))}
                 {columnOrders.length === 0 && (
-                  <div className="text-center text-muted-foreground text-sm py-8">
-                    Nenhum pedido
-                  </div>
+                  <div className="text-center text-muted-foreground text-sm py-8">Nenhum pedido</div>
                 )}
               </div>
             </div>
@@ -356,6 +363,13 @@ const Kitchen = () => {
         open={showDetails}
         onClose={() => setShowDetails(false)}
         onPrint={handlePrint}
+      />
+
+      <EditOrderModal
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        order={editOrder}
+        onOrderUpdated={fetchOrders}
       />
     </StaffLayout>
   );
