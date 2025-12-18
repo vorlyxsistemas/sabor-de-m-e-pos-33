@@ -47,6 +47,14 @@ const paymentMethodLabels: Record<string, string> = {
   cartao: "CARTÃO",
 };
 
+// Map for side names
+const sideNameMap: Record<string, string> = {
+  macarrao: "MACARRÃO",
+  farofa: "FAROFA",
+  macaxeira: "MACAXEIRA",
+  salada: "SALADA"
+};
+
 export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -245,7 +253,7 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                : [];
 
              return (
-               <div key={idx} style={{ marginBottom: '10px' }}>
+               <div key={idx} style={{ marginBottom: '12px', borderBottom: '1px dashed #000', paddingBottom: '8px' }}>
                  <div style={{ 
                    display: 'flex', 
                    justifyContent: 'space-between', 
@@ -269,21 +277,51 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                  {/* Lunch Details */}
                  {isLunch && (
                    <div style={{ paddingLeft: '12px', fontSize: '13px' }}>
+                     {/* Included meats */}
                      {extras?.meats && extras.meats.length > 0 && (
-                       <div style={{ fontWeight: 700 }}>► CARNES: {extras.meats.join(", ").toUpperCase()}</div>
+                       <div style={{ fontWeight: 900, marginTop: '4px' }}>
+                         ► CARNES INCLUÍDAS:
+                         <div style={{ paddingLeft: '8px', fontWeight: 700 }}>
+                           {extras.meats.map((meat: string, i: number) => (
+                             <div key={i}>• {meat.toUpperCase()}</div>
+                           ))}
+                         </div>
+                       </div>
                      )}
+                     
+                     {/* Extra meats */}
                      {extras?.extraMeats && extras.extraMeats.length > 0 && (
-                       <div style={{ fontWeight: 700 }}>► + EXTRAS: {extras.extraMeats.join(", ").toUpperCase()}</div>
+                       <div style={{ fontWeight: 900, marginTop: '4px', borderTop: '1px dotted #000', paddingTop: '4px' }}>
+                         ► CARNES EXTRAS (+R$):
+                         <div style={{ paddingLeft: '8px', fontWeight: 700 }}>
+                           {extras.extraMeats.map((meat: string, i: number) => (
+                             <div key={i}>• {meat.toUpperCase()}</div>
+                           ))}
+                         </div>
+                       </div>
                      )}
+                     
+                     {/* Free sides */}
                      {extras?.sides && extras.sides.length > 0 && (
-                       <div style={{ fontWeight: 700 }}>
-                         ► ACOMP: {extras.sides.map((s: string) => {
-                           const sideMap: Record<string, string> = {
-                             macarrao: "MACARRÃO", farofa: "FAROFA",
-                             macaxeira: "MACAXEIRA", salada: "SALADA"
-                           };
-                           return sideMap[s] || s.toUpperCase();
-                         }).join(", ")}
+                       <div style={{ fontWeight: 900, marginTop: '4px', borderTop: '1px dotted #000', paddingTop: '4px' }}>
+                         ► ACOMPANHAMENTOS (GRÁTIS):
+                         <div style={{ paddingLeft: '8px', fontWeight: 700 }}>
+                           {extras.sides.map((side: string, i: number) => (
+                             <div key={i}>• {(sideNameMap[side] || side).toUpperCase()}</div>
+                           ))}
+                         </div>
+                       </div>
+                     )}
+                     
+                     {/* Paid sides */}
+                     {extras?.paidSides && extras.paidSides.length > 0 && (
+                       <div style={{ fontWeight: 900, marginTop: '4px', borderTop: '1px dotted #000', paddingTop: '4px' }}>
+                         ► ACOMPANHAMENTOS (+R$):
+                         <div style={{ paddingLeft: '8px', fontWeight: 700 }}>
+                           {extras.paidSides.map((side: any, i: number) => (
+                             <div key={i}>• {side.name.toUpperCase()} (+R${Number(side.price).toFixed(2)})</div>
+                           ))}
+                         </div>
                        </div>
                      )}
                    </div>

@@ -10,9 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, Banknote, CreditCard, QrCode } from "lucide-react";
+import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, Banknote, CreditCard, QrCode, ListPlus } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
@@ -25,12 +26,12 @@ interface CartItem {
   extras: { name: string; price: number }[];
   tapioca_molhada: boolean;
   selected_variation?: string;
-  // Lunch specific fields
   isLunch?: boolean;
   lunchBase?: { id: string; name: string; price: number };
   lunchMeats?: string[];
   lunchExtraMeats?: string[];
   lunchSides?: string[];
+  lunchPaidSides?: { name: string; price: number }[];
 }
 
 interface LunchCartItem {
@@ -39,8 +40,17 @@ interface LunchCartItem {
   meats: string[];
   extraMeats: string[];
   sides: string[];
+  paidSides?: { name: string; price: number }[];
   quantity: number;
   totalPrice: number;
+}
+
+interface ExistingOrder {
+  id: string;
+  customer_name: string;
+  created_at: string;
+  status: string;
+  total: number;
 }
 
 const NewOrder = () => {
@@ -67,6 +77,12 @@ const NewOrder = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  // Add to existing order state
+  const [addToExisting, setAddToExisting] = useState(false);
+  const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
+  const [selectedExistingOrder, setSelectedExistingOrder] = useState<string>('');
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
   useEffect(() => {
     fetchCategories();
     fetchDeliveryZones();
@@ -75,6 +91,12 @@ const NewOrder = () => {
   useEffect(() => {
     if (selectedCategory) fetchItems();
   }, [selectedCategory]);
+
+  useEffect(() => {
+    if (addToExisting) {
+      fetchExistingOrders();
+    }
+  }, [addToExisting]);
 
   const fetchCategories = async () => {
     const { data } = await supabase.from('categories').select('*').order('name');
@@ -88,6 +110,27 @@ const NewOrder = () => {
       .select('id, bairro, taxa')
       .order('bairro');
     setDeliveryZones(data || []);
+  };
+
+  const fetchExistingOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const { data } = await (supabase as any)
+        .from('orders')
+        .select('id, customer_name, created_at, status, total')
+        .gte('created_at', today.toISOString())
+        .in('status', ['pending', 'preparing', 'ready'])
+        .order('created_at', { ascending: false });
+
+      setExistingOrders(data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoadingOrders(false);
+    }
   };
 
   const handleBairroChange = (selectedBairro: string) => {
@@ -110,7 +153,6 @@ const NewOrder = () => {
     const tapiocaExtra = tapioca_molhada ? 1 : 0;
     const price = Number(item.price) + extrasTotal + tapiocaExtra;
 
-    // Build display name with variation if present
     const displayName = selected_variation 
       ? `${item.name} (${selected_variation})`
       : item.name;
@@ -127,23 +169,6 @@ const NewOrder = () => {
   };
 
   const addLunchToCart = (lunchItem: LunchCartItem) => {
-    const sidesNames = lunchItem.sides.map(s => {
-      const sideMap: Record<string, string> = {
-        macarrao: "Macarrão",
-        farofa: "Farofa", 
-        macaxeira: "Macaxeira",
-        salada: "Salada"
-      };
-      return sideMap[s] || s;
-    });
-
-    const description = [
-      lunchItem.base.name,
-      `Carnes: ${lunchItem.meats.join(", ")}`,
-      lunchItem.extraMeats.length > 0 ? `Extras: ${lunchItem.extraMeats.join(", ")}` : null,
-      sidesNames.length > 0 ? `Acomp: ${sidesNames.join(", ")}` : null,
-    ].filter(Boolean).join(" | ");
-
     setCart([...cart, {
       item_id: null,
       name: `Almoço - ${lunchItem.base.name}`,
@@ -156,6 +181,7 @@ const NewOrder = () => {
       lunchMeats: lunchItem.meats,
       lunchExtraMeats: lunchItem.extraMeats,
       lunchSides: lunchItem.sides,
+      lunchPaidSides: lunchItem.paidSides || [],
     }]);
 
     toast({ title: "Almoço adicionado ao carrinho!" });
@@ -180,87 +206,161 @@ const NewOrder = () => {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const total = subtotal + (orderType === 'entrega' ? deliveryTax : 0);
-
+  const total = subtotal + (orderType === 'entrega' && !addToExisting ? deliveryTax : 0);
 
   const handleSubmit = async () => {
-    if (!customerName.trim()) {
-      toast({ title: "Nome é obrigatório", variant: "destructive" });
-      return;
-    }
     if (cart.length === 0) {
       toast({ title: "Adicione itens ao pedido", variant: "destructive" });
       return;
     }
 
+    // Validate based on mode
+    if (addToExisting) {
+      if (!selectedExistingOrder) {
+        toast({ title: "Selecione um pedido existente", variant: "destructive" });
+        return;
+      }
+    } else {
+      if (!customerName.trim()) {
+        toast({ title: "Nome é obrigatório", variant: "destructive" });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          customer_name: customerName,
-          customer_phone: customerPhone || null,
-          order_type: orderType,
-          table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
-          address: orderType === 'entrega' ? address : null,
-          bairro: orderType === 'entrega' ? bairro : null,
-          reference: orderType === 'entrega' ? reference : null,
-          delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
-          subtotal,
-          total,
-          status: 'pending',
-          payment_method: paymentMethod,
-          troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
-          observations: observations.trim() || null,
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderItems = cart.map(item => {
-        let extrasData: any;
-        if (item.isLunch) {
-          extrasData = {
-            type: "lunch",
-            base: item.lunchBase,
-            meats: item.lunchMeats,
-            extraMeats: item.lunchExtraMeats,
-            sides: item.lunchSides,
-            regularExtras: item.extras
-          };
-        } else {
-          const parsedVariation = (() => {
-            const match = item.name.match(/\(([^)]+)\)\s*$/);
-            return match?.[1]?.trim();
-          })();
-
-          const variation = item.selected_variation || parsedVariation;
-
-          if (variation) {
+      if (addToExisting) {
+        // Add items to existing order
+        const orderItems = cart.map(item => {
+          let extrasData: any;
+          if (item.isLunch) {
             extrasData = {
-              selected_variation: variation,
+              type: "lunch",
+              base: item.lunchBase,
+              meats: item.lunchMeats,
+              extraMeats: item.lunchExtraMeats,
+              sides: item.lunchSides,
+              paidSides: item.lunchPaidSides,
               regularExtras: item.extras
             };
           } else {
-            extrasData = item.extras;
+            const parsedVariation = (() => {
+              const match = item.name.match(/\(([^)]+)\)\s*$/);
+              return match?.[1]?.trim();
+            })();
+
+            const variation = item.selected_variation || parsedVariation;
+
+            if (variation) {
+              extrasData = {
+                selected_variation: variation,
+                regularExtras: item.extras
+              };
+            } else {
+              extrasData = item.extras;
+            }
           }
-        }
 
-        return {
-          order_id: order.id,
-          item_id: item.item_id,
-          quantity: item.quantity,
-          extras: extrasData,
-          tapioca_molhada: item.tapioca_molhada,
-          price: item.price * item.quantity,
-        };
-      });
+          return {
+            order_id: selectedExistingOrder,
+            item_id: item.item_id,
+            quantity: item.quantity,
+            extras: extrasData,
+            tapioca_molhada: item.tapioca_molhada,
+            price: item.price * item.quantity,
+          };
+        });
 
-      await supabase.from('order_items').insert(orderItems);
+        const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+        if (itemsError) throw itemsError;
 
-      toast({ title: "Pedido criado com sucesso!" });
-      navigate(isAdmin ? '/admin/kanban' : '/kitchen');
+        // Update order total
+        const existingOrder = existingOrders.find(o => o.id === selectedExistingOrder);
+        const newTotal = (existingOrder?.total || 0) + subtotal;
+        
+        const { error: updateError } = await supabase
+          .from('orders')
+          .update({ 
+            total: newTotal,
+            subtotal: newTotal - (deliveryTax || 0),
+            last_modified_at: new Date().toISOString()
+          } as any)
+          .eq('id', selectedExistingOrder);
+
+        if (updateError) throw updateError;
+
+        toast({ title: "Itens adicionados ao pedido existente!" });
+        navigate(isAdmin ? '/admin/kanban' : '/kitchen');
+      } else {
+        // Create new order
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            customer_name: customerName,
+            customer_phone: customerPhone || null,
+            order_type: orderType,
+            table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
+            address: orderType === 'entrega' ? address : null,
+            bairro: orderType === 'entrega' ? bairro : null,
+            reference: orderType === 'entrega' ? reference : null,
+            delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+            subtotal,
+            total,
+            status: 'pending',
+            payment_method: paymentMethod,
+            troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
+            observations: observations.trim() || null,
+          })
+          .select()
+          .single();
+
+        if (orderError) throw orderError;
+
+        const orderItems = cart.map(item => {
+          let extrasData: any;
+          if (item.isLunch) {
+            extrasData = {
+              type: "lunch",
+              base: item.lunchBase,
+              meats: item.lunchMeats,
+              extraMeats: item.lunchExtraMeats,
+              sides: item.lunchSides,
+              paidSides: item.lunchPaidSides,
+              regularExtras: item.extras
+            };
+          } else {
+            const parsedVariation = (() => {
+              const match = item.name.match(/\(([^)]+)\)\s*$/);
+              return match?.[1]?.trim();
+            })();
+
+            const variation = item.selected_variation || parsedVariation;
+
+            if (variation) {
+              extrasData = {
+                selected_variation: variation,
+                regularExtras: item.extras
+              };
+            } else {
+              extrasData = item.extras;
+            }
+          }
+
+          return {
+            order_id: order.id,
+            item_id: item.item_id,
+            quantity: item.quantity,
+            extras: extrasData,
+            tapioca_molhada: item.tapioca_molhada,
+            price: item.price * item.quantity,
+          };
+        });
+
+        await supabase.from('order_items').insert(orderItems);
+
+        toast({ title: "Pedido criado com sucesso!" });
+        navigate(isAdmin ? '/admin/kanban' : '/kitchen');
+      }
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } finally {
@@ -277,6 +377,10 @@ const NewOrder = () => {
       </Layout>
     );
   }
+
+  const formatTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <Layout title="Novo Pedido" subtitle="Montar pedido">
@@ -348,13 +452,12 @@ const NewOrder = () => {
                         )}
                         {item.isLunch && item.lunchSides && item.lunchSides.length > 0 && (
                           <p className="text-xs text-green-600">
-                            Acomp: {item.lunchSides.map(s => {
-                              const sideMap: Record<string, string> = {
-                                macarrao: "Macarrão", farofa: "Farofa", 
-                                macaxeira: "Macaxeira", salada: "Salada"
-                              };
-                              return sideMap[s] || s;
-                            }).join(", ")}
+                            Acomp: {item.lunchSides.join(", ")}
+                          </p>
+                        )}
+                        {item.isLunch && item.lunchPaidSides && item.lunchPaidSides.length > 0 && (
+                          <p className="text-xs text-orange-600">
+                            + Pagos: {item.lunchPaidSides.map(s => s.name).join(", ")}
                           </p>
                         )}
                         {!item.isLunch && item.extras.length > 0 && (
@@ -388,151 +491,200 @@ const NewOrder = () => {
 
               <div className="pt-2 space-y-2 text-sm">
                 <div className="flex justify-between"><span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span></div>
-                {orderType === 'entrega' && <div className="flex justify-between"><span>Taxa</span><span>R$ {deliveryTax.toFixed(2)}</span></div>}
+                {orderType === 'entrega' && !addToExisting && <div className="flex justify-between"><span>Taxa</span><span>R$ {deliveryTax.toFixed(2)}</span></div>}
                 <div className="flex justify-between font-bold"><span>Total</span><span>R$ {total.toFixed(2)}</span></div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Customer Info */}
+          {/* Add to Existing Order Option */}
           <Card>
-            <CardContent className="pt-4 space-y-3">
-              <div>
-                <Label className="text-xs">Nome do Cliente *</Label>
-                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Nome" />
+            <CardContent className="pt-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <Checkbox
+                  id="add-existing"
+                  checked={addToExisting}
+                  onCheckedChange={(checked) => {
+                    setAddToExisting(checked as boolean);
+                    if (!checked) {
+                      setSelectedExistingOrder('');
+                    }
+                  }}
+                />
+                <Label htmlFor="add-existing" className="text-sm font-medium cursor-pointer flex items-center gap-2">
+                  <ListPlus className="h-4 w-4" />
+                  Adicionar a pedido existente
+                </Label>
               </div>
-              <div>
-                <Label className="text-xs">Telefone</Label>
-                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="(00) 00000-0000" />
-              </div>
-              <div>
-                <Label className="text-xs font-medium">Tipo de Pedido *</Label>
-                <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="grid grid-cols-3 gap-2 mt-2">
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'local' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="local" id="local" className="sr-only" />
-                    <Label htmlFor="local" className="cursor-pointer text-center">
-                      <Store className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Local</span>
-                    </Label>
-                  </div>
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'retirada' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="retirada" id="retirada" className="sr-only" />
-                    <Label htmlFor="retirada" className="cursor-pointer text-center">
-                      <MapPin className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Retirada</span>
-                    </Label>
-                  </div>
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'entrega' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="entrega" id="entrega" className="sr-only" />
-                    <Label htmlFor="entrega" className="cursor-pointer text-center">
-                      <Truck className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Entrega</span>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              {orderType === 'local' && (
-                <div>
-                  <Label className="text-xs">Número da Mesa</Label>
-                  <Select value={tableNumber} onValueChange={setTableNumber}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a mesa" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border shadow-lg z-50">
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <SelectItem key={i + 1} value={String(i + 1)}>
-                          Mesa {i + 1}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {orderType === 'entrega' && (
-                <>
-                  <div>
-                    <Label className="text-xs">Bairro *</Label>
-                    <Select value={bairro} onValueChange={handleBairroChange}>
+
+              {addToExisting && (
+                <div className="space-y-2">
+                  {loadingOrders ? (
+                    <div className="flex items-center justify-center py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : existingOrders.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum pedido ativo hoje</p>
+                  ) : (
+                    <Select value={selectedExistingOrder} onValueChange={setSelectedExistingOrder}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione o bairro" />
+                        <SelectValue placeholder="Selecione o pedido" />
                       </SelectTrigger>
                       <SelectContent className="bg-background border shadow-lg z-50 max-h-60">
-                        {deliveryZones.map((zone) => (
-                          <SelectItem key={zone.id} value={zone.bairro}>
-                            {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : '(Grátis)'}
+                        {existingOrders.map((order) => (
+                          <SelectItem key={order.id} value={order.id}>
+                            #{order.id.slice(-6).toUpperCase()} - {order.customer_name} ({formatTime(order.created_at)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Customer Info - Only show if NOT adding to existing */}
+          {!addToExisting && (
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div>
+                  <Label className="text-xs">Nome do Cliente *</Label>
+                  <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Nome" />
+                </div>
+                <div>
+                  <Label className="text-xs">Telefone</Label>
+                  <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Tipo de Pedido *</Label>
+                  <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="grid grid-cols-3 gap-2 mt-2">
+                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'local' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="local" id="local" className="sr-only" />
+                      <Label htmlFor="local" className="cursor-pointer text-center">
+                        <Store className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-xs">Local</span>
+                      </Label>
+                    </div>
+                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'retirada' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="retirada" id="retirada" className="sr-only" />
+                      <Label htmlFor="retirada" className="cursor-pointer text-center">
+                        <MapPin className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-xs">Retirada</span>
+                      </Label>
+                    </div>
+                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'entrega' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="entrega" id="entrega" className="sr-only" />
+                      <Label htmlFor="entrega" className="cursor-pointer text-center">
+                        <Truck className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-xs">Entrega</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                {orderType === 'local' && (
+                  <div>
+                    <Label className="text-xs">Número da Mesa</Label>
+                    <Select value={tableNumber} onValueChange={setTableNumber}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a mesa" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border shadow-lg z-50">
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <SelectItem key={i + 1} value={String(i + 1)}>
+                            Mesa {i + 1}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label className="text-xs">Endereço *</Label>
-                    <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Rua, número" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Ponto de Referência</Label>
-                    <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Próximo a..." />
-                  </div>
-                </>
-              )}
-              
-              {/* Payment Method */}
-              <div>
-                <Label className="text-xs font-medium">Forma de Pagamento *</Label>
-                <RadioGroup value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} className="grid grid-cols-3 gap-2 mt-2">
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'pix' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="pix" id="pix" className="sr-only" />
-                    <Label htmlFor="pix" className="cursor-pointer text-center">
-                      <QrCode className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Pix</span>
-                    </Label>
-                  </div>
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'dinheiro' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="dinheiro" id="dinheiro" className="sr-only" />
-                    <Label htmlFor="dinheiro" className="cursor-pointer text-center">
-                      <Banknote className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Dinheiro</span>
-                    </Label>
-                  </div>
-                  <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'cartao' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
-                    <RadioGroupItem value="cartao" id="cartao" className="sr-only" />
-                    <Label htmlFor="cartao" className="cursor-pointer text-center">
-                      <CreditCard className="h-5 w-5 mx-auto mb-1" />
-                      <span className="text-xs">Cartão</span>
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              {paymentMethod === 'dinheiro' && (
+                )}
+                {orderType === 'entrega' && (
+                  <>
+                    <div>
+                      <Label className="text-xs">Bairro *</Label>
+                      <Select value={bairro} onValueChange={handleBairroChange}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o bairro" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-background border shadow-lg z-50 max-h-60">
+                          {deliveryZones.map((zone) => (
+                            <SelectItem key={zone.id} value={zone.bairro}>
+                              {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : '(Grátis)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Endereço *</Label>
+                      <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Rua, número" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Ponto de Referência</Label>
+                      <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Próximo a..." />
+                    </div>
+                  </>
+                )}
+                
+                {/* Payment Method */}
                 <div>
-                  <Label className="text-xs">Troco para quanto?</Label>
-                  <Input 
-                    type="number" 
-                    value={troco} 
-                    onChange={e => setTroco(e.target.value)} 
-                    placeholder="Ex: 50.00 (deixe vazio se não precisar)"
+                  <Label className="text-xs font-medium">Forma de Pagamento *</Label>
+                  <RadioGroup value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} className="grid grid-cols-3 gap-2 mt-2">
+                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'pix' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="pix" id="pix" className="sr-only" />
+                      <Label htmlFor="pix" className="cursor-pointer text-center">
+                        <QrCode className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-xs">Pix</span>
+                      </Label>
+                    </div>
+                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'dinheiro' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="dinheiro" id="dinheiro" className="sr-only" />
+                      <Label htmlFor="dinheiro" className="cursor-pointer text-center">
+                        <Banknote className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-xs">Dinheiro</span>
+                      </Label>
+                    </div>
+                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'cartao' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                      <RadioGroupItem value="cartao" id="cartao" className="sr-only" />
+                      <Label htmlFor="cartao" className="cursor-pointer text-center">
+                        <CreditCard className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-xs">Cartão</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                {paymentMethod === 'dinheiro' && (
+                  <div>
+                    <Label className="text-xs">Troco para quanto?</Label>
+                    <Input 
+                      type="number" 
+                      value={troco} 
+                      onChange={e => setTroco(e.target.value)} 
+                      placeholder="Ex: 50.00 (deixe vazio se não precisar)"
+                    />
+                  </div>
+                )}
+
+                {/* Observations */}
+                <div>
+                  <Label className="text-xs">Observações</Label>
+                  <Textarea 
+                    value={observations} 
+                    onChange={e => setObservations(e.target.value)} 
+                    placeholder="Ex: Sem cebola, ponto da carne, etc."
+                    maxLength={500}
+                    rows={2}
                   />
                 </div>
-              )}
+              </CardContent>
+            </Card>
+          )}
 
-              {/* Observations */}
-              <div>
-                <Label className="text-xs">Observações</Label>
-                <Textarea 
-                  value={observations} 
-                  onChange={e => setObservations(e.target.value)} 
-                  placeholder="Ex: Sem cebola, ponto da carne, etc."
-                  maxLength={500}
-                  rows={2}
-                />
-              </div>
-
-              <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
-                {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                Finalizar Pedido
-              </Button>
-            </CardContent>
-          </Card>
+          <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
+            {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {addToExisting ? 'Adicionar ao Pedido' : 'Finalizar Pedido'}
+          </Button>
         </div>
       </div>
     </Layout>
