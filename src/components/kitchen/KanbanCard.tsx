@@ -135,10 +135,10 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
             {itemsSummary}
           </div>
 
-          {/* Observations */}
+          {/* Observações */}
           {order.observations && (
-            <div className="text-[12px] text-amber-700 bg-amber-50 px-2 py-1 rounded mt-1 break-words">
-              ⚠️ {order.observations}
+            <div className="mt-1 rounded-md border border-border/50 bg-accent/30 px-2 py-1 text-[12px] text-foreground whitespace-pre-wrap break-words">
+              <span className="font-semibold">Observações:</span> {order.observations}
             </div>
           )}
         </div>
