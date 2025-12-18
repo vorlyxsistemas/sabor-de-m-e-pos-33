@@ -151,32 +151,41 @@ export function LunchOrderModal({ open, onOpenChange, onAddToOrder }: LunchOrder
         setGrilledMeats(porcoes.map((p: any) => p.name));
       }
 
-      // Fetch lunch sides from DB - always use DB data
+      // Fetch lunch sides from DB - ONLY use DB data, filter by available=true
       const { data: sidesData, error: sidesError } = await (supabase as any)
         .from("lunch_sides")
         .select("*")
         .eq("available", true)
         .order("name");
 
+      console.log("Fetched lunch_sides:", sidesData, "Error:", sidesError);
+      
       if (sidesError) {
         console.error("Error fetching lunch_sides:", sidesError);
-        // Keep defaults if table doesn't exist
-      } else if (sidesData) {
-        // Always use DB data, even if empty (keeps defaults only if error)
-        setLunchSides(sidesData.length > 0 ? sidesData : DEFAULT_FREE_SIDES);
+        // Only use defaults if table doesn't exist (error code 42P01)
+        if (sidesError.code === "42P01") {
+          setLunchSides(DEFAULT_FREE_SIDES);
+        }
+      } else {
+        // ALWAYS use DB data - no fallback to defaults
+        // If DB returns empty array, show empty (admin needs to add items)
+        setLunchSides(sidesData || []);
       }
 
-      // Fetch extra meats from DB - always use DB data
+      // Fetch extra meats from DB - ONLY use DB data, filter by available=true
       const { data: extraMeatsData, error: extraMeatsError } = await (supabase as any)
         .from("extra_meats")
         .select("*")
         .eq("available", true)
         .order("name");
 
+      console.log("Fetched extra_meats:", extraMeatsData, "Error:", extraMeatsError);
+
       if (extraMeatsError) {
         console.error("Error fetching extra_meats:", extraMeatsError);
-      } else if (extraMeatsData) {
-        setExtraMeatsOptions(extraMeatsData);
+      } else {
+        // ALWAYS use DB data - only available=true items
+        setExtraMeatsOptions(extraMeatsData || []);
       }
     } catch (error) {
       console.error("Error fetching lunch data:", error);
@@ -187,11 +196,12 @@ export function LunchOrderModal({ open, onOpenChange, onAddToOrder }: LunchOrder
 
   const allAvailableMeats = [...todayMeats, ...grilledMeats];
 
-  // Get extra meats options - combine DB extra_meats + available meats
-  const allExtraMeatOptions = [
-    ...extraMeatsOptions.map(m => ({ name: m.name, price: m.price })),
-    ...allAvailableMeats.filter(m => !extraMeatsOptions.find(em => em.name === m)).map(m => ({ name: m, price: 6 }))
-  ];
+  // Extra meats options - ONLY from extra_meats table, respecting available=true filter
+  // Do NOT mix with allAvailableMeats - those are included meats, not extras
+  const allExtraMeatOptions = extraMeatsOptions.map(m => ({ 
+    name: m.name, 
+    price: Number(m.price) || 0 
+  }));
 
   const toggleMeat = (meat: string) => {
     if (meatOption === "one") {
