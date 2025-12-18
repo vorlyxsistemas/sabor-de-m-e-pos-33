@@ -23,9 +23,9 @@ interface Order {
   order_items: OrderItem[];
 }
 
-export async function generateDailyReport() {
-  // Get today's date range
-  const now = new Date();
+export async function generateDailyReport(targetDate?: Date) {
+  // Get target date range (defaults to today)
+  const now = targetDate || new Date();
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(now);
@@ -119,7 +119,7 @@ export async function generateDailyReport() {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const dateStr = now.toLocaleDateString("pt-BR");
-  const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const generatedAtStr = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
   // Header
   doc.setFontSize(20);
@@ -225,12 +225,13 @@ export async function generateDailyReport() {
 
   // Footer with generation timestamp
   const pageCount = doc.getNumberOfPages();
+  const generatedDate = new Date().toLocaleDateString("pt-BR");
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.text(
-      `Relatório gerado em ${dateStr} às ${timeStr} - Página ${i} de ${pageCount}`,
+      `Relatório de ${dateStr} - Gerado em ${generatedDate} às ${generatedAtStr} - Página ${i} de ${pageCount}`,
       pageWidth / 2,
       doc.internal.pageSize.getHeight() - 10,
       { align: "center" }

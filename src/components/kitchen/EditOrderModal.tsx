@@ -66,8 +66,8 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedItemToAdd, setSelectedItemToAdd] = useState<string>("");
 
-  // Status that blocks editing
-  const blockedStatuses = ["cancelled", "delivered"];
+  // Status that blocks editing - only cancelled orders cannot be edited
+  const blockedStatuses = ["cancelled"];
   const isBlocked = order ? blockedStatuses.includes(order.status) : false;
 
   useEffect(() => {
@@ -124,19 +124,33 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
     const itemToAdd = availableItems.find(i => i.id === selectedItemToAdd);
     if (!itemToAdd) return;
 
-    const newItem: OrderItem = {
-      item_id: itemToAdd.id,
-      quantity: 1,
-      price: Number(itemToAdd.price),
-      extras: [],
-      tapioca_molhada: false,
-      item: { id: itemToAdd.id, name: itemToAdd.name, price: Number(itemToAdd.price) },
-      isNew: true,
-    };
+    // Check if item already exists in the order
+    const existingIndex = items.findIndex(
+      i => (i.item_id === itemToAdd.id || i.item?.id === itemToAdd.id) && !i.isNew
+    );
 
-    setItems([...items, newItem]);
+    if (existingIndex >= 0) {
+      // Increment quantity of existing item
+      const newItems = [...items];
+      newItems[existingIndex].quantity += 1;
+      setItems(newItems);
+      toast({ title: `Quantidade de ${itemToAdd.name} aumentada` });
+    } else {
+      // Add as new item
+      const newItem: OrderItem = {
+        item_id: itemToAdd.id,
+        quantity: 1,
+        price: Number(itemToAdd.price),
+        extras: [],
+        tapioca_molhada: false,
+        item: { id: itemToAdd.id, name: itemToAdd.name, price: Number(itemToAdd.price) },
+        isNew: true,
+      };
+      setItems([...items, newItem]);
+      toast({ title: `${itemToAdd.name} adicionado ao pedido` });
+    }
+    
     setSelectedItemToAdd("");
-    toast({ title: `${itemToAdd.name} adicionado ao pedido` });
   };
 
   const calculateTotals = () => {
@@ -233,8 +247,9 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
     if (extras?.type === "lunch") {
       return `Almoço - ${extras?.base?.name || "Base"}`;
     }
+    // Handle missing item name
+    const baseName = item.item?.name || (item.item_id ? "Item carregando..." : "Item sem nome");
     const variation = extras?.selected_variation;
-    const baseName = item.item?.name || "Item";
     return variation ? `${baseName} (${variation})` : baseName;
   };
 
