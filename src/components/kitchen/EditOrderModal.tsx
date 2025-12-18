@@ -431,17 +431,15 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                   )}
                 </div>
                 
-                {/* Quick lunch add button */}
-                {!isLunchCategory && (
-                  <Button 
-                    variant="outline" 
-                    className="w-full gap-2"
-                    onClick={() => setShowLunchModal(true)}
-                  >
-                    <UtensilsCrossed className="h-4 w-4" />
-                    Adicionar Almoço Completo
-                  </Button>
-                )}
+                {/* Quick lunch add button - sempre visível */}
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2"
+                  onClick={() => setShowLunchModal(true)}
+                >
+                  <UtensilsCrossed className="h-4 w-4" />
+                  Adicionar Almoço Completo
+                </Button>
               </div>
 
               {/* Observations */}
