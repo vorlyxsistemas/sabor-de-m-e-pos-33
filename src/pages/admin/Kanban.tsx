@@ -134,6 +134,8 @@ const Kanban = () => {
           payment_method,
           troco,
           archived,
+          observations,
+          last_modified_at,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
         `;
 
@@ -156,6 +158,8 @@ const Kanban = () => {
           scheduled_for,
           payment_method,
           troco,
+          observations,
+          last_modified_at,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
         `;
 
@@ -253,6 +257,7 @@ const Kanban = () => {
               scheduled_for,
               payment_method,
               troco,
+              observations,
               order_items(quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)
@@ -463,7 +468,7 @@ const Kanban = () => {
                           onEdit={() => handleEditOrder(order)}
                           canAdvance={col.status !== "delivered"}
                           canCancel={order.status === "pending"}
-                          canEdit={order.status !== "cancelled" && order.status !== "delivered"}
+                          canEdit={order.status !== "cancelled"}
                         />
                         {archiveSupported && col.status === "delivered" && (
                           <Button

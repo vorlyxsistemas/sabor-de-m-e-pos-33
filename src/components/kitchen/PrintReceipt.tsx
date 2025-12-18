@@ -78,7 +78,13 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
           @media print {
             @page {
               size: 80mm auto;
-              margin: 0;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 80mm !important;
             }
             * {
               visibility: hidden;
@@ -86,35 +92,40 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            body {
-              margin: 0 !important;
-              padding: 0 !important;
-            }
             .print-receipt, .print-receipt * {
               visibility: visible;
               color: #000 !important;
             }
             .print-receipt {
-              position: fixed;
-              left: 50%;
-              top: 0;
-              transform: translateX(-50%);
-              width: 72mm;
-              max-width: 72mm;
-              padding: 2mm 4mm;
-              margin: 0 auto;
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              transform: none !important;
+              width: 76mm !important;
+              max-width: 76mm !important;
+              padding: 2mm !important;
+              margin: 0 !important;
               background: #fff !important;
-              font-size: 12px;
+              font-size: 12px !important;
+              box-sizing: border-box !important;
             }
             .no-print {
               display: none !important;
             }
           }
-          @media print and (max-width: 58mm) {
+          @media print and (max-width: 62mm) {
+            @page {
+              size: 58mm auto;
+              margin: 0 !important;
+            }
+            html, body {
+              width: 58mm !important;
+            }
             .print-receipt {
-              width: 54mm;
-              max-width: 54mm;
-              font-size: 11px;
+              width: 54mm !important;
+              max-width: 54mm !important;
+              font-size: 11px !important;
+              padding: 1mm !important;
             }
           }
           .print-receipt {

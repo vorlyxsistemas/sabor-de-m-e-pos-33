@@ -4,9 +4,13 @@ import { StatsCard } from "@/components/shared/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { generateDailyReport } from "@/lib/generateDailyReport";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { 
   ShoppingBag, 
   DollarSign, 
@@ -17,7 +21,8 @@ import {
   MapPin,
   Store,
   Truck,
-  FileText
+  FileText,
+  CalendarIcon
 } from "lucide-react";
 
 interface DashboardStats {
@@ -49,14 +54,15 @@ const Dashboard = () => {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [reportDate, setReportDate] = useState<Date>(new Date());
 
-  const handleGenerateReport = async () => {
+  const handleGenerateReport = async (date?: Date) => {
     setGeneratingReport(true);
     try {
-      await generateDailyReport();
+      await generateDailyReport(date || reportDate);
       toast({
         title: "Relatório gerado!",
-        description: "O PDF foi baixado com sucesso.",
+        description: `PDF do dia ${format(date || reportDate, "dd/MM/yyyy")} baixado.`,
       });
     } catch (error) {
       console.error("Error generating report:", error);
@@ -197,10 +203,28 @@ const Dashboard = () => {
 
   return (
     <AdminLayout title="Dashboard" subtitle="Visão geral do sistema">
-      {/* Report Button */}
-      <div className="flex justify-end mb-4">
+      {/* Report Section */}
+      <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <CalendarIcon className="h-4 w-4" />
+              {format(reportDate, "dd/MM/yyyy", { locale: ptBR })}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar
+              mode="single"
+              selected={reportDate}
+              onSelect={(date) => date && setReportDate(date)}
+              locale={ptBR}
+              disabled={(date) => date > new Date()}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
         <Button 
-          onClick={handleGenerateReport} 
+          onClick={() => handleGenerateReport()} 
           disabled={generatingReport}
           className="gap-2"
         >
@@ -209,7 +233,7 @@ const Dashboard = () => {
           ) : (
             <FileText className="h-4 w-4" />
           )}
-          Gerar Relatório Diário (PDF)
+          Gerar Relatório PDF
         </Button>
       </div>
 

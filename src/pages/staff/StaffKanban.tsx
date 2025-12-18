@@ -109,6 +109,8 @@ const StaffKanban = () => {
           scheduled_for,
           payment_method,
           troco,
+          observations,
+          last_modified_at,
           order_items(quantity, price, extras, tapioca_molhada, item:items(name))
         `)
         .gte("created_at", today.toISOString())
@@ -185,6 +187,7 @@ const StaffKanban = () => {
               scheduled_for,
               payment_method,
               troco,
+              observations,
               order_items(quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)
@@ -326,7 +329,7 @@ const StaffKanban = () => {
                     onEdit={() => handleEditOrder(order)}
                     canAdvance={col.status !== "delivered"}
                     canCancel={order.status === "pending"}
-                    canEdit={order.status !== "cancelled" && order.status !== "delivered"}
+                    canEdit={order.status !== "cancelled"}
                   />
                 ))}
                 {columnOrders.length === 0 && (
