@@ -41,6 +41,7 @@ interface Order {
   payment_method: string | null;
   troco: number | null;
   observations: string | null;
+  printed?: boolean;
   order_items: OrderItem[];
 }
 
@@ -88,7 +89,6 @@ const Kitchen = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // @ts-ignore - bairro/payment_method/troco/observations columns exist but types are not updated
       const { data, error } = await (supabase as any)
         .from("orders")
         .select(`
@@ -111,6 +111,7 @@ const Kitchen = () => {
           payment_method,
           troco,
           observations,
+          printed,
           order_items(item_id, quantity, price, extras, tapioca_molhada, item:items(name))
         `)
         .gte("created_at", today.toISOString())
@@ -130,38 +131,46 @@ const Kitchen = () => {
     }
   }, [toast]);
 
-  // Auto-print new pending orders (only if enabled)
+  // Auto-print new pending orders (only if enabled and not already printed)
   const autoPrintPendingOrders = useCallback(
-    (newOrders: Order[], shouldPrint: boolean) => {
+    async (newOrders: Order[], shouldPrint: boolean) => {
       if (!shouldPrint) {
         console.log("Auto-print disabled, skipping");
         return;
       }
 
-      newOrders.forEach((order) => {
-        if (order.status === "pending" && !printedOrdersRef.current.has(order.id)) {
+      for (const order of newOrders) {
+        // Check if order is pending, not already printed in DB, and not printed in this session
+        if (order.status === "pending" && !order.printed && !printedOrdersRef.current.has(order.id)) {
           printedOrdersRef.current.add(order.id);
           console.log("Auto-printing order:", order.id);
 
           // Small delay to ensure order data is complete
-          setTimeout(() => {
-            try {
-              printReceipt(order);
-              toast({
-                title: "Comanda impressa",
-                description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
-              });
-            } catch (error) {
-              console.error("Erro ao imprimir comanda:", error);
-              toast({
-                title: "Erro na impressão",
-                description: "Não foi possível imprimir a comanda automaticamente",
-                variant: "destructive",
-              });
-            }
-          }, 500);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          try {
+            printReceipt(order);
+            
+            // Mark as printed in database
+            await (supabase as any)
+              .from("orders")
+              .update({ printed: true })
+              .eq("id", order.id);
+
+            toast({
+              title: "Comanda impressa",
+              description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
+            });
+          } catch (error) {
+            console.error("Erro ao imprimir comanda:", error);
+            toast({
+              title: "Erro na impressão",
+              description: "Não foi possível imprimir a comanda automaticamente",
+              variant: "destructive",
+            });
+          }
         }
-      });
+      }
     },
     [toast]
   );
@@ -185,7 +194,6 @@ const Kitchen = () => {
           const shouldPrint = settings?.auto_print_enabled || false;
 
           // Fetch the complete order with items for printing
-          // @ts-ignore - bairro/payment_method/troco/observations columns exist but types are not updated
           const { data: newOrder } = await (supabase as any)
             .from("orders")
             .select(`
@@ -207,6 +215,7 @@ const Kitchen = () => {
               payment_method,
               troco,
               observations,
+              printed,
               order_items(item_id, quantity, price, extras, tapioca_molhada, item:items(name))
             `)
             .eq("id", payload.new.id)
