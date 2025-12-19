@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { StaffLayout } from "@/components/layout/StaffLayout";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Printer } from "lucide-react";
 import { KanbanCard } from "@/components/kitchen/KanbanCard";
 import { OrderDetailsModal } from "@/components/kitchen/OrderDetailsModal";
 import { EditOrderModal } from "@/components/kitchen/EditOrderModal";
@@ -70,19 +72,64 @@ const Kitchen = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
+  const [togglingAutoPrint, setTogglingAutoPrint] = useState(false);
   const printedOrdersRef = useRef<Set<string>>(new Set());
+  const initialPrintDoneRef = useRef(false);
 
-  // Fetch auto-print setting
+  // Fetch auto-print setting using public endpoint (accessible to staff)
   const fetchSettings = useCallback(async () => {
     try {
-      const { data } = await supabase.functions.invoke("settings", {
+      const { data, error } = await supabase.functions.invoke("settings-public", {
         method: "GET",
       });
+      if (error) {
+        console.error("Erro ao carregar configurações:", error);
+        // Fallback to localStorage if settings fetch fails
+        const localSetting = localStorage.getItem("autoPrintEnabled");
+        setAutoPrintEnabled(localSetting === "true");
+        return;
+      }
       setAutoPrintEnabled(data?.auto_print_enabled || false);
     } catch (error) {
       console.error("Erro ao carregar configurações:", error);
+      // Fallback to localStorage
+      const localSetting = localStorage.getItem("autoPrintEnabled");
+      setAutoPrintEnabled(localSetting === "true");
     }
   }, []);
+
+  // Toggle auto-print setting
+  const toggleAutoPrint = async (enabled: boolean) => {
+    setTogglingAutoPrint(true);
+    try {
+      // Try to update in database via settings endpoint (admin only)
+      const { error } = await supabase.functions.invoke("settings", {
+        method: "POST",
+        body: { auto_print_enabled: enabled },
+      });
+
+      if (error) {
+        // If not admin, save locally only
+        console.log("Salvando configuração localmente");
+        localStorage.setItem("autoPrintEnabled", String(enabled));
+      }
+
+      setAutoPrintEnabled(enabled);
+      toast({
+        title: enabled ? "Impressão automática ativada" : "Impressão automática desativada",
+        description: enabled 
+          ? "Novos pedidos serão impressos automaticamente" 
+          : "Impressão manual continua disponível",
+      });
+    } catch (error) {
+      console.error("Erro ao alterar configuração:", error);
+      // Fallback to localStorage
+      localStorage.setItem("autoPrintEnabled", String(enabled));
+      setAutoPrintEnabled(enabled);
+    } finally {
+      setTogglingAutoPrint(false);
+    }
+  };
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -175,9 +222,102 @@ const Kitchen = () => {
     [toast]
   );
 
+  // Print unprinted pending orders on initial load (for computer restart scenario)
+  const printUnprintedOrders = useCallback(async (ordersToCheck: Order[], shouldPrint: boolean) => {
+    if (!shouldPrint || initialPrintDoneRef.current) {
+      return;
+    }
+    initialPrintDoneRef.current = true;
+
+    const unprintedPending = ordersToCheck.filter(
+      order => order.status === "pending" && !order.printed && !printedOrdersRef.current.has(order.id)
+    );
+
+    if (unprintedPending.length === 0) {
+      console.log("Nenhum pedido pendente não impresso encontrado");
+      return;
+    }
+
+    console.log(`Encontrados ${unprintedPending.length} pedidos pendentes não impressos`);
+    
+    for (const order of unprintedPending) {
+      printedOrdersRef.current.add(order.id);
+      console.log("Imprimindo pedido pendente:", order.id);
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Delay between prints
+
+      try {
+        printReceipt(order);
+        
+        // Mark as printed in database
+        await (supabase as any)
+          .from("orders")
+          .update({ printed: true })
+          .eq("id", order.id);
+
+        toast({
+          title: "Comanda impressa",
+          description: `Pedido #${order.id.slice(-6).toUpperCase()} (pendente) enviado para impressão`,
+        });
+      } catch (error) {
+        console.error("Erro ao imprimir comanda:", error);
+      }
+    }
+  }, [toast]);
+
   useEffect(() => {
-    fetchSettings();
-    fetchOrders();
+    const initializeKitchen = async () => {
+      await fetchSettings();
+      
+      // Fetch orders and check for unprinted pending orders
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const { data, error } = await (supabase as any)
+        .from("orders")
+        .select(`
+          id,
+          customer_name,
+          customer_phone,
+          status,
+          order_type,
+          table_number,
+          address,
+          bairro,
+          cep,
+          reference,
+          subtotal,
+          delivery_tax,
+          extras_fee,
+          total,
+          created_at,
+          scheduled_for,
+          payment_method,
+          troco,
+          observations,
+          printed,
+          order_items(item_id, quantity, price, extras, tapioca_molhada, item:items(name))
+        `)
+        .gte("created_at", today.toISOString())
+        .neq("status", "cancelled")
+        .order("created_at");
+
+      if (!error && data) {
+        setOrders(data as Order[]);
+        setLoading(false);
+
+        // Check localStorage first (for staff), then use state
+        const localSetting = localStorage.getItem("autoPrintEnabled");
+        const shouldPrint = localSetting === "true" || autoPrintEnabled;
+        
+        // Print any unprinted pending orders from previous session
+        await printUnprintedOrders(data as Order[], shouldPrint);
+      } else {
+        setLoading(false);
+      }
+    };
+
+    initializeKitchen();
 
     // Realtime subscription
     const channel = supabase
@@ -187,11 +327,21 @@ const Kitchen = () => {
         { event: "INSERT", schema: "public", table: "orders" },
         async (payload) => {
           console.log("New order inserted:", payload);
-          // Fetch latest settings to check if auto-print is enabled
-          const { data: settings } = await supabase.functions.invoke("settings", {
-            method: "GET",
-          });
-          const shouldPrint = settings?.auto_print_enabled || false;
+          
+          // Check if auto-print is enabled (localStorage or DB)
+          const localSetting = localStorage.getItem("autoPrintEnabled");
+          let shouldPrint = localSetting === "true";
+          
+          if (!shouldPrint) {
+            try {
+              const { data: settings } = await supabase.functions.invoke("settings-public", {
+                method: "GET",
+              });
+              shouldPrint = settings?.auto_print_enabled || false;
+            } catch {
+              shouldPrint = false;
+            }
+          }
 
           // Fetch the complete order with items for printing
           const { data: newOrder } = await (supabase as any)
@@ -202,6 +352,7 @@ const Kitchen = () => {
               customer_phone,
               status,
               order_type,
+              table_number,
               address,
               bairro,
               cep,
@@ -235,7 +386,7 @@ const Kitchen = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, fetchSettings, autoPrintPendingOrders]);
+  }, [fetchOrders, fetchSettings, autoPrintPendingOrders, printUnprintedOrders, autoPrintEnabled]);
 
   const moveOrder = async (orderId: string, currentStatus: OrderStatus) => {
     const nextStatus = getNextStatus(currentStatus);
@@ -334,6 +485,23 @@ const Kitchen = () => {
 
   return (
     <StaffLayout title="Cozinha" subtitle="Kanban de pedidos em tempo real">
+      {/* Auto-print toggle */}
+      <div className="flex items-center justify-end gap-3 mb-4 p-3 bg-muted/50 rounded-lg">
+        <Printer className="h-4 w-4 text-muted-foreground" />
+        <Label htmlFor="auto-print" className="text-sm font-medium cursor-pointer">
+          Impressão automática
+        </Label>
+        <Switch
+          id="auto-print"
+          checked={autoPrintEnabled}
+          onCheckedChange={toggleAutoPrint}
+          disabled={togglingAutoPrint}
+        />
+        <span className={`text-xs font-medium px-2 py-1 rounded ${autoPrintEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+          {autoPrintEnabled ? "Ativada" : "Desativada"}
+        </span>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {columns.map((col) => {
           const columnOrders = orders.filter((o) => o.status === col.status);

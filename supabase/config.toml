@@ -39,6 +39,9 @@ verify_jwt = true
 [functions.settings]
 verify_jwt = false
 
+[functions.settings-public]
+verify_jwt = false
+
 [functions.whatsapp-recebido]
 verify_jwt = false
 
