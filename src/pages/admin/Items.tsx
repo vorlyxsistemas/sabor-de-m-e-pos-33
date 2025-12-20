@@ -31,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Loader2, X, Upload, Image as ImageIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, X, Upload, Image as ImageIcon, ToggleLeft, ToggleRight } from "lucide-react";
 
 interface Category {
   id: string;
@@ -94,6 +94,33 @@ const Items = () => {
   const [newExtra, setNewExtra] = useState({ name: '', price: 0 });
   const [newVariationOption, setNewVariationOption] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+
+  const toggleAllItems = async (available: boolean) => {
+    if (selectedCategory === 'all') return;
+    
+    const categoryName = categories.find(c => c.id === selectedCategory)?.name || 'categoria';
+    const action = available ? 'ativar' : 'desativar';
+    
+    if (!confirm(`Tem certeza que deseja ${action} todos os itens de "${categoryName}"?`)) return;
+    
+    setBulkUpdating(true);
+    try {
+      const { error } = await supabase
+        .from('items')
+        .update({ available })
+        .eq('category_id', selectedCategory);
+      
+      if (error) throw error;
+      
+      toast({ title: `Todos os itens ${available ? 'ativados' : 'desativados'}!` });
+      fetchItems();
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
 
   useEffect(() => {
     fetchCategories();
@@ -348,6 +375,42 @@ const Items = () => {
           Adicionar Item
         </Button>
       </div>
+
+      {selectedCategory !== 'all' && (
+        <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/50 rounded-lg border">
+          <span className="text-sm text-muted-foreground self-center mr-2">
+            Ações em massa:
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleAllItems(true)}
+            disabled={bulkUpdating || loading}
+            className="gap-2"
+          >
+            {bulkUpdating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ToggleRight className="h-4 w-4" />
+            )}
+            Ativar todos
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toggleAllItems(false)}
+            disabled={bulkUpdating || loading}
+            className="gap-2"
+          >
+            {bulkUpdating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ToggleLeft className="h-4 w-4" />
+            )}
+            Desativar todos
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
