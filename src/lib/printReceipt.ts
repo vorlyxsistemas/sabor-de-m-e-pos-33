@@ -278,28 +278,69 @@ export function generateReceiptHTML(order: Order): string {
   `;
 }
 
-export function printReceipt(order: Order): void {
-  const receiptHTML = generateReceiptHTML(order);
-  
-  // Open print window
-  const printWindow = window.open("", "_blank", "width=300,height=600");
-  if (!printWindow) {
-    console.error("Não foi possível abrir a janela de impressão. Verifique se pop-ups estão bloqueados.");
-    return;
-  }
-
-  printWindow.document.write(receiptHTML);
-  printWindow.document.close();
-
-  // Wait for content to load, then print
-  printWindow.onload = () => {
+export function printReceipt(order: Order): Promise<boolean> {
+  return new Promise((resolve) => {
+    const receiptHTML = generateReceiptHTML(order);
+    
+    // Create hidden iframe for printing (avoids popup blockers)
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    iframe.style.visibility = "hidden";
+    
+    document.body.appendChild(iframe);
+    
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      console.error("Não foi possível criar iframe para impressão");
+      document.body.removeChild(iframe);
+      resolve(false);
+      return;
+    }
+    
+    iframeDoc.open();
+    iframeDoc.write(receiptHTML);
+    iframeDoc.close();
+    
+    // Wait for content to load, then print
+    iframe.onload = () => {
+      setTimeout(() => {
+        try {
+          const iframeWindow = iframe.contentWindow;
+          if (iframeWindow) {
+            console.log("Disparando impressão automática...");
+            iframeWindow.focus();
+            iframeWindow.print();
+          }
+          
+          // Clean up iframe after print dialog closes
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              document.body.removeChild(iframe);
+            }
+            resolve(true);
+          }, 1000);
+        } catch (error) {
+          console.error("Erro ao imprimir:", error);
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+          resolve(false);
+        }
+      }, 300);
+    };
+    
+    // Fallback: trigger onload manually for some browsers
     setTimeout(() => {
-      printWindow.print();
-      printWindow.onafterprint = () => {
-        printWindow.close();
-      };
-    }, 100);
-  };
+      if (iframe.onload) {
+        iframe.onload(new Event("load"));
+      }
+    }, 500);
+  });
 }
 
 // ESC/POS command generator for Elgin I9 (for future WebSocket/USB integration)
