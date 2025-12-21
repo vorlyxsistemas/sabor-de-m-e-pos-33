@@ -182,32 +182,50 @@ const Kitchen = () => {
   const autoPrintPendingOrders = useCallback(
     async (newOrders: Order[], shouldPrint: boolean) => {
       if (!shouldPrint) {
-        console.log("Auto-print disabled, skipping");
+        console.log("Auto-print desativado, ignorando impressão");
         return;
       }
 
-      for (const order of newOrders) {
-        // Check if order is pending, not already printed in DB, and not printed in this session
-        if (order.status === "pending" && !order.printed && !printedOrdersRef.current.has(order.id)) {
-          printedOrdersRef.current.add(order.id);
-          console.log("Auto-printing order:", order.id);
+      console.log(`Verificando ${newOrders.length} pedidos para impressão automática...`);
 
-          // Small delay to ensure order data is complete
-          await new Promise(resolve => setTimeout(resolve, 500));
+      for (const order of newOrders) {
+        console.log(`Pedido ${order.id}: status=${order.status}, printed=${order.printed}, já impresso nesta sessão=${printedOrdersRef.current.has(order.id)}`);
+        
+        // Check if order is pending, not already printed in DB, and not printed in this session
+        if (order.status === "pending" && order.printed === false && !printedOrdersRef.current.has(order.id)) {
+          // Mark as being printed in this session IMMEDIATELY to prevent duplicates
+          printedOrdersRef.current.add(order.id);
+          console.log(`[AUTO-PRINT] Iniciando impressão do pedido ${order.id}...`);
 
           try {
-            printReceipt(order);
+            // Print the receipt
+            const success = await printReceipt(order);
             
-            // Mark as printed in database
-            await (supabase as any)
-              .from("orders")
-              .update({ printed: true })
-              .eq("id", order.id);
+            if (success) {
+              // Mark as printed in database
+              const { error: updateError } = await (supabase as any)
+                .from("orders")
+                .update({ printed: true })
+                .eq("id", order.id);
 
-            toast({
-              title: "Comanda impressa",
-              description: `Pedido #${order.id.slice(-6).toUpperCase()} enviado para impressão`,
-            });
+              if (updateError) {
+                console.error("Erro ao atualizar status de impressão:", updateError);
+              } else {
+                console.log(`[AUTO-PRINT] Pedido ${order.id} marcado como impresso no banco`);
+              }
+
+              toast({
+                title: "🖨️ Comanda impressa automaticamente",
+                description: `Pedido #${order.id.slice(-6).toUpperCase()}`,
+              });
+            } else {
+              console.error(`[AUTO-PRINT] Falha ao imprimir pedido ${order.id}`);
+              toast({
+                title: "Erro na impressão",
+                description: `Não foi possível imprimir pedido #${order.id.slice(-6).toUpperCase()}`,
+                variant: "destructive",
+              });
+            }
           } catch (error) {
             console.error("Erro ao imprimir comanda:", error);
             toast({
@@ -216,6 +234,9 @@ const Kitchen = () => {
               variant: "destructive",
             });
           }
+
+          // Small delay between prints to avoid overwhelming the printer
+          await new Promise(resolve => setTimeout(resolve, 1500));
         }
       }
     },
@@ -224,13 +245,20 @@ const Kitchen = () => {
 
   // Print unprinted pending orders on initial load (for computer restart scenario)
   const printUnprintedOrders = useCallback(async (ordersToCheck: Order[], shouldPrint: boolean) => {
-    if (!shouldPrint || initialPrintDoneRef.current) {
+    if (!shouldPrint) {
+      console.log("Impressão automática desativada, ignorando pedidos pendentes");
       return;
     }
+    
+    if (initialPrintDoneRef.current) {
+      console.log("Impressão inicial já realizada nesta sessão");
+      return;
+    }
+    
     initialPrintDoneRef.current = true;
 
     const unprintedPending = ordersToCheck.filter(
-      order => order.status === "pending" && !order.printed && !printedOrdersRef.current.has(order.id)
+      order => order.status === "pending" && order.printed === false && !printedOrdersRef.current.has(order.id)
     );
 
     if (unprintedPending.length === 0) {
@@ -238,30 +266,36 @@ const Kitchen = () => {
       return;
     }
 
-    console.log(`Encontrados ${unprintedPending.length} pedidos pendentes não impressos`);
+    console.log(`[STARTUP] Encontrados ${unprintedPending.length} pedidos pendentes não impressos`);
+    
+    // Small delay to ensure page is fully loaded
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
     for (const order of unprintedPending) {
       printedOrdersRef.current.add(order.id);
-      console.log("Imprimindo pedido pendente:", order.id);
-
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Delay between prints
+      console.log(`[STARTUP] Imprimindo pedido pendente: ${order.id}`);
 
       try {
-        printReceipt(order);
+        const success = await printReceipt(order);
         
-        // Mark as printed in database
-        await (supabase as any)
-          .from("orders")
-          .update({ printed: true })
-          .eq("id", order.id);
+        if (success) {
+          // Mark as printed in database
+          await (supabase as any)
+            .from("orders")
+            .update({ printed: true })
+            .eq("id", order.id);
 
-        toast({
-          title: "Comanda impressa",
-          description: `Pedido #${order.id.slice(-6).toUpperCase()} (pendente) enviado para impressão`,
-        });
+          toast({
+            title: "🖨️ Comanda impressa (pendente)",
+            description: `Pedido #${order.id.slice(-6).toUpperCase()}`,
+          });
+        }
       } catch (error) {
         console.error("Erro ao imprimir comanda:", error);
       }
+
+      // Delay between prints
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }, [toast]);
 
@@ -326,25 +360,32 @@ const Kitchen = () => {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "orders" },
         async (payload) => {
-          console.log("New order inserted:", payload);
+          console.log("[REALTIME] Novo pedido detectado:", payload.new.id);
           
-          // Check if auto-print is enabled (localStorage or DB)
+          // Check if auto-print is enabled (localStorage first, then DB)
           const localSetting = localStorage.getItem("autoPrintEnabled");
           let shouldPrint = localSetting === "true";
           
-          if (!shouldPrint) {
+          console.log(`[REALTIME] Auto-print localStorage: ${localSetting}, shouldPrint inicial: ${shouldPrint}`);
+          
+          if (!shouldPrint && localSetting !== "false") {
+            // Only check DB if localStorage doesn't have an explicit setting
             try {
               const { data: settings } = await supabase.functions.invoke("settings-public", {
                 method: "GET",
               });
               shouldPrint = settings?.auto_print_enabled || false;
-            } catch {
+              console.log(`[REALTIME] Auto-print do banco: ${shouldPrint}`);
+            } catch (err) {
+              console.error("[REALTIME] Erro ao buscar configurações:", err);
               shouldPrint = false;
             }
           }
 
+          console.log(`[REALTIME] Decisão final: shouldPrint = ${shouldPrint}`);
+
           // Fetch the complete order with items for printing
-          const { data: newOrder } = await (supabase as any)
+          const { data: newOrder, error: fetchError } = await (supabase as any)
             .from("orders")
             .select(`
               id,
@@ -372,16 +413,28 @@ const Kitchen = () => {
             .eq("id", payload.new.id)
             .single();
 
-          if (newOrder && (newOrder as any).status === "pending") {
-            autoPrintPendingOrders([newOrder as Order], shouldPrint);
+          if (fetchError) {
+            console.error("[REALTIME] Erro ao buscar detalhes do pedido:", fetchError);
+            fetchOrders();
+            return;
           }
+
+          console.log(`[REALTIME] Pedido carregado: status=${newOrder?.status}, printed=${newOrder?.printed}`);
+
+          if (newOrder && newOrder.status === "pending") {
+            // Call auto-print function
+            await autoPrintPendingOrders([newOrder as Order], shouldPrint);
+          }
+          
           fetchOrders();
         }
       )
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders" }, () => {
         fetchOrders();
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`[REALTIME] Status da conexão: ${status}`);
+      });
 
     return () => {
       supabase.removeChannel(channel);
