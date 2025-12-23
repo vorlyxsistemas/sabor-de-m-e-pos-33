@@ -74,6 +74,7 @@ const createOrderBodySchema = z.object({
   payment_method: z.union([z.string().max(50), z.null()]).optional(),
   troco: z.union([z.number().min(0).max(9999.99), z.null()]).optional(),
   user_id: z.string().uuid().nullable().optional(),
+  observations: z.union([z.string().max(500), z.null()]).optional(),
 })
 
 const updateOrderStatusSchema = z.object({
@@ -702,7 +703,8 @@ Deno.serve(async (req) => {
           status: 'pending',
           payment_method: body.payment_method || null,
           troco: body.troco || null,
-          user_id: userId
+          user_id: userId,
+          observations: body.observations || null
         })
         .select()
         .single()
