@@ -51,15 +51,11 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
-    // Use anon key client for auth validation
-    const supabaseAuth = createClient(supabaseUrl, anonKey);
-    // Use service role for data operations (bypasses RLS)
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      console.error("No authorization header provided");
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -67,18 +63,22 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+    console.log("Validating token for orders-update...");
+    
     const {
       data: { user },
       error: authError,
-    } = await supabaseAuth.auth.getUser(token);
+    } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
-      console.error("Auth error:", authError);
-      return new Response(JSON.stringify({ error: "Token inválido" }), {
+      console.error("Auth error details:", authError?.message, authError?.status);
+      return new Response(JSON.stringify({ error: "Token inválido", details: authError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    
+    console.log("User authenticated:", user.id, user.email);
 
     const [isAdmin, isStaff] = await Promise.all([
       hasRole(supabase, user.id, "admin"),
