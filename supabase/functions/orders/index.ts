@@ -683,6 +683,7 @@ Deno.serve(async (req) => {
       const total = subtotal + deliveryFee
 
       console.log(`Order totals - Subtotal: R$${subtotal}, Extras: R$${extrasTotal}, Delivery: R$${deliveryFee}, Total: R$${total}`)
+      console.log(`Order observations: "${body.observations || '(nenhuma)'}"`)
 
       // Create order
       const { data: order, error: orderError } = await supabase
