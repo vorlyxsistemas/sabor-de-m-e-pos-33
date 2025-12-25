@@ -180,13 +180,40 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
   };
 
   const calculateTotals = () => {
+    // Calculate subtotal from all current items
     const subtotal = items.reduce((sum, item) => {
-      const itemPrice = item.price || item.item?.price || 0;
-      return sum + (Number(itemPrice) * item.quantity);
+      const basePrice = Number(item.price) || Number(item.item?.price) || 0;
+      const quantity = Number(item.quantity) || 1;
+      
+      // Calculate extras price if applicable
+      let extrasPrice = 0;
+      if (item.extras && typeof item.extras === 'object' && !Array.isArray(item.extras)) {
+        // Lunch item with extras object
+        if (item.extras.type === 'lunch') {
+          // Extra meats cost
+          const extraMeats = item.extras.extraMeats || [];
+          extrasPrice += extraMeats.length * 3; // R$3 per extra meat
+          
+          // Paid sides cost
+          const paidSides = item.extras.paidSides || [];
+          paidSides.forEach((side: any) => {
+            extrasPrice += Number(side.price) || 0;
+          });
+        }
+      } else if (Array.isArray(item.extras)) {
+        // Regular extras array
+        item.extras.forEach((extra: any) => {
+          extrasPrice += Number(extra.price) || 0;
+        });
+      }
+      
+      return sum + ((basePrice + extrasPrice) * quantity);
     }, 0);
-    const deliveryTax = order?.delivery_tax || 0;
+    
+    const deliveryTax = Number(order?.delivery_tax) || 0;
     const total = subtotal + deliveryTax;
-    return { subtotal, deliveryTax, total };
+    
+    return { subtotal: Number(subtotal.toFixed(2)), deliveryTax, total: Number(total.toFixed(2)) };
   };
 
   const handleSave = async () => {
@@ -206,38 +233,64 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
     try {
       const { subtotal, total } = calculateTotals();
 
-      // Use edge function to update order (bypasses RLS for delete)
+      // Prepare order items payload with correct prices
       const orderItemsPayload = items.map(item => ({
         item_id: item.item_id || item.item?.id || null,
-        quantity: item.quantity,
-        price: item.price || item.item?.price || 0,
+        quantity: Number(item.quantity) || 1,
+        price: Number(item.price) || Number(item.item?.price) || 0,
         extras: item.extras || [],
-        tapioca_molhada: item.tapioca_molhada || false,
+        tapioca_molhada: Boolean(item.tapioca_molhada),
       }));
+
+      console.log("Saving order update:", { 
+        orderId: order.id, 
+        itemsCount: orderItemsPayload.length,
+        subtotal, 
+        total,
+        observations 
+      });
+
+      // Get current session to ensure we're authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Sessão expirada. Por favor, faça login novamente.");
+      }
 
       const { data, error } = await supabase.functions.invoke("orders-update", {
         method: "POST",
         body: {
           id: order.id,
           items: orderItemsPayload,
-          observations,
+          observations: observations || null,
           subtotal,
           total,
         },
       });
 
       // Check if the response contains an error
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        console.error("Edge function error:", error);
+        throw error;
+      }
+      if (data?.error) {
+        console.error("Response error:", data.error, data.details);
+        throw new Error(data.details || data.error);
+      }
 
       toast({ title: "Pedido atualizado com sucesso!" });
       onOrderUpdated();
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error saving order:", error);
+      
+      let errorMessage = error.message || "Erro desconhecido";
+      if (errorMessage.includes("Token inválido") || errorMessage.includes("401")) {
+        errorMessage = "Sessão expirada. Por favor, faça login novamente.";
+      }
+      
       toast({ 
         title: "Erro ao salvar alterações", 
-        description: error.message,
+        description: errorMessage,
         variant: "destructive" 
       });
     } finally {
