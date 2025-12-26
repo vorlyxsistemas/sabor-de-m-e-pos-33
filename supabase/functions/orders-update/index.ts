@@ -13,7 +13,7 @@ const uuidSchema = z.string().uuid("ID inválido");
 const updateOrderItemSchema = z.object({
   item_id: z.union([uuidSchema, z.null()]).optional(),
   quantity: z.number().int().min(1).max(50),
-  price: z.number().min(0).max(9999.99),
+  price: z.number().min(0).max(9999.99), // This is UNIT price
   extras: z.any().optional().default([]),
   tapioca_molhada: z.boolean().optional().default(false),
 });
@@ -22,8 +22,9 @@ const updateOrderBodySchema = z.object({
   id: uuidSchema,
   items: z.array(updateOrderItemSchema).min(1, "Pedido deve ter pelo menos um item").max(30),
   observations: z.string().max(500).optional().nullable(),
-  subtotal: z.number().min(0).max(99999.99),
-  total: z.number().min(0).max(99999.99),
+  // subtotal and total are accepted but will be RECALCULATED on backend
+  subtotal: z.number().min(0).max(99999.99).optional(),
+  total: z.number().min(0).max(99999.99).optional(),
 });
 
 async function hasRole(supabase: any, userId: string, role: "admin" | "staff") {
@@ -33,6 +34,61 @@ async function hasRole(supabase: any, userId: string, role: "admin" | "staff") {
     return false;
   }
   return data === true;
+}
+
+// Calculate extras price from extras object/array
+function calculateExtrasPrice(extras: any): number {
+  if (!extras) return 0;
+  
+  let extrasPrice = 0;
+  
+  if (typeof extras === 'object' && !Array.isArray(extras)) {
+    // Lunch item with extras object
+    if (extras.type === 'lunch') {
+      // Extra meats cost R$3 each
+      const extraMeats = extras.extraMeats || [];
+      extrasPrice += extraMeats.length * 3;
+      
+      // Paid sides cost
+      const paidSides = extras.paidSides || [];
+      paidSides.forEach((side: any) => {
+        extrasPrice += Number(side.price) || 0;
+      });
+    }
+  } else if (Array.isArray(extras)) {
+    // Regular extras array
+    extras.forEach((extra: any) => {
+      extrasPrice += Number(extra.price) || 0;
+    });
+  }
+  
+  return extrasPrice;
+}
+
+// CRITICAL: Always recalculate totals from items - NEVER trust frontend values
+function calculateOrderTotals(items: any[], deliveryTax: number = 0): { subtotal: number; total: number } {
+  // Reset to zero and calculate fresh
+  let subtotal = 0;
+  
+  for (const item of items) {
+    const unitPrice = Number(item.price) || 0;
+    const quantity = Number(item.quantity) || 1;
+    const extrasPrice = calculateExtrasPrice(item.extras);
+    
+    // Line total = (unit price + extras) * quantity
+    const lineTotal = (unitPrice + extrasPrice) * quantity;
+    subtotal += lineTotal;
+    
+    console.log(`Item calculation: unitPrice=${unitPrice}, extras=${extrasPrice}, qty=${quantity}, lineTotal=${lineTotal}`);
+  }
+  
+  // Round to 2 decimal places
+  subtotal = Math.round(subtotal * 100) / 100;
+  const total = Math.round((subtotal + deliveryTax) * 100) / 100;
+  
+  console.log(`Order totals: subtotal=${subtotal}, deliveryTax=${deliveryTax}, total=${total}`);
+  
+  return { subtotal, total };
 }
 
 serve(async (req) => {
@@ -93,6 +149,8 @@ serve(async (req) => {
     }
 
     const rawBody = await req.json();
+    console.log("Received update request:", JSON.stringify(rawBody, null, 2));
+    
     const bodyResult = updateOrderBodySchema.safeParse(rawBody);
     if (!bodyResult.success) {
       const errors = bodyResult.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ");
@@ -106,12 +164,12 @@ serve(async (req) => {
     const body = bodyResult.data;
     const orderId = body.id;
 
-    console.log("Updating order with items:", orderId);
+    console.log("Updating order:", orderId, "with", body.items.length, "items");
 
-    // Ensure order exists and not cancelled
+    // Ensure order exists and not cancelled, also get delivery_tax
     const { data: existingOrder, error: orderCheckError } = await supabase
       .from("orders")
-      .select("id, status")
+      .select("id, status, delivery_tax")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -130,6 +188,12 @@ serve(async (req) => {
       });
     }
 
+    // CRITICAL: Recalculate totals from scratch - NEVER trust frontend values
+    const deliveryTax = Number((existingOrder as any).delivery_tax) || 0;
+    const { subtotal, total } = calculateOrderTotals(body.items, deliveryTax);
+    
+    console.log(`Backend calculated: subtotal=${subtotal}, total=${total} (frontend sent: subtotal=${body.subtotal}, total=${body.total})`);
+
     // Delete existing items (service role bypasses RLS)
     const { error: deleteError } = await supabase.from("order_items").delete().eq("order_id", orderId);
     if (deleteError) {
@@ -137,15 +201,17 @@ serve(async (req) => {
       throw deleteError;
     }
 
-    // Insert new items
+    // Insert new items with UNIT prices only
     const itemsToInsert = body.items.map((item) => ({
       order_id: orderId,
       item_id: item.item_id || null,
       quantity: item.quantity,
-      price: item.price,
+      price: item.price, // This is UNIT price, not line total
       extras: item.extras ?? [],
       tapioca_molhada: item.tapioca_molhada ?? false,
     }));
+
+    console.log("Inserting items:", JSON.stringify(itemsToInsert, null, 2));
 
     const { error: insertError } = await supabase.from("order_items").insert(itemsToInsert);
     if (insertError) {
@@ -153,11 +219,12 @@ serve(async (req) => {
       throw insertError;
     }
 
+    // Update order with BACKEND-CALCULATED values
     const { data: updatedOrder, error: updateError } = await supabase
       .from("orders")
       .update({
-        subtotal: body.subtotal,
-        total: body.total,
+        subtotal: subtotal, // Backend calculated
+        total: total,       // Backend calculated
         observations: body.observations || null,
         last_modified_at: new Date().toISOString(),
         last_modified_by: user.id,
@@ -170,6 +237,8 @@ serve(async (req) => {
       console.error("Error updating order:", updateError);
       throw updateError;
     }
+
+    console.log("Order updated successfully:", orderId, "subtotal:", subtotal, "total:", total);
 
     return new Response(JSON.stringify({ data: updatedOrder, message: "Pedido atualizado com sucesso" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
