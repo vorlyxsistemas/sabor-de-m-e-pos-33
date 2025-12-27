@@ -7,11 +7,12 @@ import { format } from "date-fns";
 import { CancelOrderDialog } from "@/components/order/CancelOrderDialog";
 
 interface OrderItem {
+  item_id?: string | null;
   quantity: number;
   price: number;
   extras: any;
   tapioca_molhada?: boolean;
-  item: { name: string } | null;
+  item: { id?: string; name: string; price?: number } | null;
 }
 
 interface Order {

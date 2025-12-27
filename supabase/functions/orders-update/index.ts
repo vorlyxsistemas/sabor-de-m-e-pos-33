@@ -291,27 +291,43 @@ serve(async (req) => {
     }
 
     // Update order with BACKEND-CALCULATED values
-    const { data: updatedOrder, error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from("orders")
       .update({
         subtotal: subtotal, // Backend calculated
         total: total,       // Backend calculated
-        observations: body.observations || null,
+        observations: body.observations ?? undefined, // Keep existing if not provided
         last_modified_at: new Date().toISOString(),
         last_modified_by: user.id,
       })
-      .eq("id", orderId)
-      .select()
-      .single();
+      .eq("id", orderId);
 
     if (updateError) {
       console.error("Error updating order:", updateError);
       throw updateError;
     }
 
+    // Fetch complete order with order_items and item names for return
+    const { data: completeOrder, error: fetchError } = await supabase
+      .from("orders")
+      .select(`
+        *,
+        order_items(
+          *,
+          item:items(id, name, price)
+        )
+      `)
+      .eq("id", orderId)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching complete order:", fetchError);
+      throw fetchError;
+    }
+
     console.log("Order updated successfully:", orderId, "subtotal:", subtotal, "total:", total);
 
-    return new Response(JSON.stringify({ data: updatedOrder, message: "Pedido atualizado com sucesso" }), {
+    return new Response(JSON.stringify({ data: completeOrder, message: "Pedido atualizado com sucesso" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {
