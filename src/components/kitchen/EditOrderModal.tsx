@@ -190,14 +190,21 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
       if (item.extras && typeof item.extras === 'object' && !Array.isArray(item.extras)) {
         // Lunch item with extras object
         if (item.extras.type === 'lunch') {
-          // Extra meats cost
+          // Extra meats cost - use singleMeatPrice or default to R$6 (matches backend)
           const extraMeats = item.extras.extraMeats || [];
-          extrasPrice += extraMeats.length * 3; // R$3 per extra meat
+          const meatUnit = Number(item.extras.base?.singleMeatPrice) || 6;
+          extrasPrice += extraMeats.length * meatUnit;
           
           // Paid sides cost
           const paidSides = item.extras.paidSides || [];
           paidSides.forEach((side: any) => {
             extrasPrice += Number(side.price) || 0;
+          });
+          
+          // Regular extras (like drinks/additions)
+          const regularExtras = item.extras.regularExtras || [];
+          regularExtras.forEach((extra: any) => {
+            extrasPrice += Number(extra.price) || 0;
           });
         }
       } else if (Array.isArray(item.extras)) {
@@ -320,11 +327,13 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
 
   const getLunchDetails = (extras: any) => {
     if (extras?.type !== "lunch") return null;
+    const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
     return {
       meats: extras.meats || [],
       extraMeats: extras.extraMeats || [],
       sides: extras.sides || [],
       paidSides: extras.paidSides || [],
+      meatUnit,
     };
   };
 
@@ -366,15 +375,19 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                   {items.map((item, index) => {
                     const lunchDetails = getLunchDetails(item.extras);
                     
-                    // Calculate line total for display
+                    // Calculate line total for display (matches backend calculation)
                     const unitPrice = Number(item.price) || Number(item.item?.price) || 0;
                     const qty = Number(item.quantity) || 1;
                     let extrasPrice = 0;
                     if (item.extras && typeof item.extras === 'object' && !Array.isArray(item.extras)) {
                       if ((item.extras as any).type === 'lunch') {
-                        extrasPrice += ((item.extras as any).extraMeats || []).length * 3;
+                        const meatUnit = Number((item.extras as any).base?.singleMeatPrice) || 6;
+                        extrasPrice += ((item.extras as any).extraMeats || []).length * meatUnit;
                         ((item.extras as any).paidSides || []).forEach((s: any) => {
                           extrasPrice += Number(s.price) || 0;
+                        });
+                        ((item.extras as any).regularExtras || []).forEach((e: any) => {
+                          extrasPrice += Number(e.price) || 0;
                         });
                       }
                     } else if (Array.isArray(item.extras)) {
@@ -401,7 +414,7 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                                 <p>Carnes: {lunchDetails.meats.join(", ")}</p>
                               )}
                               {lunchDetails.extraMeats.length > 0 && (
-                                <p className="text-orange-600">+ Extras: {lunchDetails.extraMeats.join(", ")} (+R${(lunchDetails.extraMeats.length * 3).toFixed(2)})</p>
+                                <p className="text-orange-600">+ Extras: {lunchDetails.extraMeats.join(", ")} (+R${(lunchDetails.extraMeats.length * lunchDetails.meatUnit).toFixed(2)})</p>
                               )}
                               {lunchDetails.sides.length > 0 && (
                                 <p className="text-green-600">Acomp: {lunchDetails.sides.join(", ")}</p>
