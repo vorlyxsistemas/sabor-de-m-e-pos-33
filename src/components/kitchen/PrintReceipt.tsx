@@ -251,6 +251,26 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                    ? extras
                    : (Array.isArray(extras?.regularExtras) ? extras.regularExtras : []))
                : [];
+             
+             // Calculate extras price for display
+             let extrasPrice = 0;
+             if (isLunch) {
+               const extraMeats = extras?.extraMeats || [];
+               extrasPrice += extraMeats.length * 3;
+               const paidSides = extras?.paidSides || [];
+               paidSides.forEach((side: any) => {
+                 extrasPrice += Number(side.price) || 0;
+               });
+             } else if (regularExtras.length > 0) {
+               regularExtras.forEach((extra: any) => {
+                 extrasPrice += Number(extra.price) || 0;
+               });
+             }
+             
+             // Unit price is the base price stored in item.price
+             const unitPrice = Number(item.price) || 0;
+             // Line total = (unitPrice + extrasPrice) × quantity
+             const lineTotal = (unitPrice + extrasPrice) * item.quantity;
 
              return (
                <div key={idx} style={{ marginBottom: '12px', borderBottom: '1px dashed #000', paddingBottom: '8px' }}>
@@ -264,8 +284,14 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                      {item.quantity}x {itemName.toUpperCase()}
                      {item.tapioca_molhada && " (MOLHADA)"}
                    </span>
-                   <span>R${item.price.toFixed(2)}</span>
+                   <span>R${lineTotal.toFixed(2)}</span>
                  </div>
+                 {/* Show unit price when quantity > 1 for clarity */}
+                 {item.quantity > 1 && (
+                   <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', paddingLeft: '12px' }}>
+                     (R${unitPrice.toFixed(2)} cada)
+                   </div>
+                 )}
                  
                  {/* Selected Variation */}
                  {!isLunch && extras?.selected_variation && (

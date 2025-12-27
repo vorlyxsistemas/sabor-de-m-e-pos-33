@@ -72,10 +72,12 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
       const extras = oi.extras as any;
       const isLunch = extras?.type === "lunch";
       if (isLunch) {
-        return `${oi.quantity}x Almoço (${extras?.base?.name || "Base"})`;
+        const baseName = extras?.base?.name || "Base";
+        return `${oi.quantity}x Almoço (${baseName})`;
       }
 
-      const name = oi.item?.name || "Item";
+      // Ensure we always have a name - check multiple sources
+      const name = oi.item?.name || extras?.itemName || "Item";
       const variation = extras?.selected_variation;
       return variation ? `${oi.quantity}x ${name} (${variation})` : `${oi.quantity}x ${name}`;
     })

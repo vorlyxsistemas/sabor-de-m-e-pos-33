@@ -365,6 +365,25 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                 <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
                   {items.map((item, index) => {
                     const lunchDetails = getLunchDetails(item.extras);
+                    
+                    // Calculate line total for display
+                    const unitPrice = Number(item.price) || Number(item.item?.price) || 0;
+                    const qty = Number(item.quantity) || 1;
+                    let extrasPrice = 0;
+                    if (item.extras && typeof item.extras === 'object' && !Array.isArray(item.extras)) {
+                      if ((item.extras as any).type === 'lunch') {
+                        extrasPrice += ((item.extras as any).extraMeats || []).length * 3;
+                        ((item.extras as any).paidSides || []).forEach((s: any) => {
+                          extrasPrice += Number(s.price) || 0;
+                        });
+                      }
+                    } else if (Array.isArray(item.extras)) {
+                      item.extras.forEach((e: any) => {
+                        extrasPrice += Number(e.price) || 0;
+                      });
+                    }
+                    const lineTotal = (unitPrice + extrasPrice) * qty;
+                    
                     return (
                       <div key={index} className="flex items-start justify-between gap-2 py-2 border-b last:border-0">
                         <div className="flex-1">
@@ -382,7 +401,7 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                                 <p>Carnes: {lunchDetails.meats.join(", ")}</p>
                               )}
                               {lunchDetails.extraMeats.length > 0 && (
-                                <p className="text-orange-600">+ Extras: {lunchDetails.extraMeats.join(", ")}</p>
+                                <p className="text-orange-600">+ Extras: {lunchDetails.extraMeats.join(", ")} (+R${(lunchDetails.extraMeats.length * 3).toFixed(2)})</p>
                               )}
                               {lunchDetails.sides.length > 0 && (
                                 <p className="text-green-600">Acomp: {lunchDetails.sides.join(", ")}</p>
@@ -390,7 +409,7 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                             </div>
                           )}
                           <span className="text-xs text-muted-foreground">
-                            R$ {(item.price || item.item?.price || 0).toFixed(2)} x {item.quantity}
+                            R$ {unitPrice.toFixed(2)} {extrasPrice > 0 ? `+ R$ ${extrasPrice.toFixed(2)} ` : ''}× {qty} = R$ {lineTotal.toFixed(2)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1">
