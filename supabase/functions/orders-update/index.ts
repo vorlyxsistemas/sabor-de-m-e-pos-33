@@ -37,6 +37,8 @@ async function hasRole(supabase: any, userId: string, role: "admin" | "staff") {
 }
 
 // Calculate extras price from extras object/array
+// NOTE: extras are calculated SEPARATELY and added to unitPrice
+// The item.price should be the BASE price only, NOT including extras
 function calculateExtrasPrice(extras: any): number {
   if (!extras) return 0;
   
@@ -45,7 +47,7 @@ function calculateExtrasPrice(extras: any): number {
   if (typeof extras === 'object' && !Array.isArray(extras)) {
     // Lunch item with extras object
     if (extras.type === 'lunch') {
-      // Extra meats cost R$3 each
+      // Extra meats cost R$3 each (almoço extras)
       const extraMeats = extras.extraMeats || [];
       extrasPrice += extraMeats.length * 3;
       
@@ -54,39 +56,66 @@ function calculateExtrasPrice(extras: any): number {
       paidSides.forEach((side: any) => {
         extrasPrice += Number(side.price) || 0;
       });
+      
+      console.log(`Lunch extras: extraMeats=${extraMeats.length} (R$${extraMeats.length * 3}), paidSides=${paidSides.length}`);
     }
   } else if (Array.isArray(extras)) {
     // Regular extras array
     extras.forEach((extra: any) => {
       extrasPrice += Number(extra.price) || 0;
     });
+    if (extras.length > 0) {
+      console.log(`Regular extras: count=${extras.length}, total=R$${extrasPrice}`);
+    }
   }
   
   return extrasPrice;
 }
 
-// CRITICAL: Always recalculate totals from items - NEVER trust frontend values
+/**
+ * CRITICAL: Always recalculate totals from items - NEVER trust frontend values
+ * 
+ * CALCULATION RULE (DO NOT CHANGE):
+ * - Each item has: unitPrice (base price) + extrasPrice
+ * - Line total = (unitPrice + extrasPrice) × quantity
+ * - subtotal = SUM of all line totals
+ * - total = subtotal + deliveryTax
+ * 
+ * IMPORTANT: quantity is applied ONCE per item, never twice!
+ */
 function calculateOrderTotals(items: any[], deliveryTax: number = 0): { subtotal: number; total: number } {
-  // Reset to zero and calculate fresh
+  // ALWAYS reset to zero - NEVER use accumulated values
   let subtotal = 0;
   
-  for (const item of items) {
+  console.log(`\n=== CALCULATING ORDER TOTALS (${items.length} items) ===`);
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    
+    // Get unit price (this is the BASE price per unit, without quantity multiplication)
     const unitPrice = Number(item.price) || 0;
+    
+    // Get quantity (must be at least 1)
     const quantity = Number(item.quantity) || 1;
+    
+    // Calculate extras price (this is PER UNIT, will be multiplied by quantity below)
     const extrasPrice = calculateExtrasPrice(item.extras);
     
-    // Line total = (unit price + extras) * quantity
+    // CRITICAL: Line total formula - quantity applied ONCE
+    // lineTotal = (unitPrice + extrasPrice) × quantity
     const lineTotal = (unitPrice + extrasPrice) * quantity;
+    
+    // Add to subtotal (simple addition, no multiplication here)
     subtotal += lineTotal;
     
-    console.log(`Item calculation: unitPrice=${unitPrice}, extras=${extrasPrice}, qty=${quantity}, lineTotal=${lineTotal}`);
+    console.log(`Item ${i + 1}: unitPrice=R$${unitPrice.toFixed(2)}, extras=R$${extrasPrice.toFixed(2)}, qty=${quantity}, lineTotal=R$${lineTotal.toFixed(2)}`);
   }
   
-  // Round to 2 decimal places
+  // Round to 2 decimal places to avoid floating point issues
   subtotal = Math.round(subtotal * 100) / 100;
   const total = Math.round((subtotal + deliveryTax) * 100) / 100;
   
-  console.log(`Order totals: subtotal=${subtotal}, deliveryTax=${deliveryTax}, total=${total}`);
+  console.log(`=== FINAL: subtotal=R$${subtotal.toFixed(2)}, deliveryTax=R$${deliveryTax.toFixed(2)}, total=R$${total.toFixed(2)} ===\n`);
   
   return { subtotal, total };
 }
