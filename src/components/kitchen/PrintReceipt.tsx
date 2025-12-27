@@ -412,8 +412,8 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
           )}
         </div>
 
-        {/* Observations */}
-        {order.observations && (
+        {/* Observations - always show when present, regardless of order source */}
+        {order.observations && order.observations.trim() && (
           <div style={{ 
             marginTop: '12px', 
             border: '3px solid #000', 
