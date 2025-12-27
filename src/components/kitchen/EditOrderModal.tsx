@@ -73,7 +73,78 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
 
   useEffect(() => {
     if (open && order) {
-      setItems(order.order_items.map(item => ({ ...item })));
+      const cloned = (order.order_items || []).map((it) => ({ ...it }));
+
+      // Detect legacy orders where item.price was persisted as a LINE TOTAL (price×qty, sometimes including extras).
+      // If detected, normalize to UNIT base price so quantity is applied only once when calculating/saving.
+      const isLunch = (extras: any) => !!extras && typeof extras === "object" && !Array.isArray(extras) && (extras as any).type === "lunch";
+
+      const sumRegularExtrasUnit = (extras: any): number => {
+        if (!extras) return 0;
+        if (Array.isArray(extras)) return extras.reduce((s, e) => s + (Number(e?.price) || 0), 0);
+        if (typeof extras === "object" && !Array.isArray(extras) && Array.isArray((extras as any).regularExtras)) {
+          return (extras as any).regularExtras.reduce((s: number, e: any) => s + (Number(e?.price) || 0), 0);
+        }
+        return 0;
+      };
+
+      const getLunchExtrasUnit = (extras: any): number => {
+        if (!isLunch(extras)) return 0;
+        const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
+        const extraMeats = Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0;
+        const paidSidesTotal = Array.isArray(extras?.paidSides)
+          ? extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0)
+          : 0;
+        const regularExtrasTotal = Array.isArray(extras?.regularExtras)
+          ? extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0)
+          : 0;
+        return extraMeats * meatUnit + paidSidesTotal + regularExtrasTotal;
+      };
+
+      const subtotalAssumingUnitRule = cloned.reduce((sum, it) => {
+        const qty = Number(it.quantity) || 1;
+        const extras = it.extras as any;
+        const lunch = isLunch(extras);
+
+        const unitBase = lunch ? (Number(extras?.base?.price) || Number(it.price) || 0) : (Number(it.price) || 0);
+        const extrasUnit = lunch ? getLunchExtrasUnit(extras) : sumRegularExtrasUnit(extras);
+        return sum + (unitBase + extrasUnit) * qty;
+      }, 0);
+
+      const subtotalAssumingLineRule = cloned.reduce((sum, it) => {
+        const qty = Number(it.quantity) || 1;
+        const extras = it.extras as any;
+        const lunch = isLunch(extras);
+
+        if (!lunch) return sum + (Number(it.price) || 0);
+
+        const unitBase = Number(extras?.base?.price) || Number(it.price) || 0;
+        const extrasUnit = getLunchExtrasUnit(extras);
+        return sum + (unitBase + extrasUnit) * qty;
+      }, 0);
+
+      const target = Number(order.subtotal) || 0;
+      const diffUnit = Math.abs(subtotalAssumingUnitRule - target);
+      const diffLine = Math.abs(subtotalAssumingLineRule - target);
+      const legacyLinePrices = diffLine + 0.01 < diffUnit;
+
+      const normalized = legacyLinePrices
+        ? cloned.map((it) => {
+            const qty = Number(it.quantity) || 1;
+            const extras = it.extras as any;
+
+            if (isLunch(extras)) {
+              // keep lunch aligned with backend rule: price is BASE unit; extras are computed from payload
+              return { ...it, price: Number(extras?.base?.price) || Number(it.price) || 0 };
+            }
+
+            const extrasUnit = sumRegularExtrasUnit(extras);
+            const unitBase = qty > 0 ? (Number(it.price) || 0) / qty - extrasUnit : Number(it.price) || 0;
+            return { ...it, price: Math.max(0, Math.round(unitBase * 100) / 100) };
+          })
+        : cloned;
+
+      setItems(normalized);
       setObservations(order.observations || "");
       fetchAvailableItems();
     }
@@ -162,7 +233,8 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
     const newItem: OrderItem = {
       item_id: null,
       quantity: lunchItem.quantity,
-      price: lunchItem.totalPrice / lunchItem.quantity,
+      // IMPORTANT: backend treats price as BASE unit price for lunch; extras are computed from extras payload
+      price: Number(lunchItem.base.price) || 0,
       extras: {
         type: "lunch",
         base: lunchItem.base,
@@ -180,40 +252,49 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
   };
 
   const calculateTotals = () => {
-    // Calculate subtotal from all current items
-    const subtotal = items.reduce((sum, item) => {
-      const basePrice = Number(item.price) || Number(item.item?.price) || 0;
-      const quantity = Number(item.quantity) || 1;
-      
-      // Calculate extras price if applicable
-      let extrasPrice = 0;
-      if (item.extras && typeof item.extras === 'object' && !Array.isArray(item.extras)) {
-        // Lunch item with extras object
-        if (item.extras.type === 'lunch') {
-          // Extra meats cost
-          const extraMeats = item.extras.extraMeats || [];
-          extrasPrice += extraMeats.length * 3; // R$3 per extra meat
-          
-          // Paid sides cost
-          const paidSides = item.extras.paidSides || [];
-          paidSides.forEach((side: any) => {
-            extrasPrice += Number(side.price) || 0;
-          });
-        }
-      } else if (Array.isArray(item.extras)) {
-        // Regular extras array
-        item.extras.forEach((extra: any) => {
-          extrasPrice += Number(extra.price) || 0;
-        });
+    const isLunch = (extras: any) => !!extras && typeof extras === "object" && !Array.isArray(extras) && (extras as any).type === "lunch";
+
+    const sumRegularExtrasUnit = (extras: any): number => {
+      if (!extras) return 0;
+      if (Array.isArray(extras)) return extras.reduce((s, e) => s + (Number(e?.price) || 0), 0);
+      if (typeof extras === "object" && !Array.isArray(extras) && Array.isArray((extras as any).regularExtras)) {
+        return (extras as any).regularExtras.reduce((s: number, e: any) => s + (Number(e?.price) || 0), 0);
       }
-      
-      return sum + ((basePrice + extrasPrice) * quantity);
+      return 0;
+    };
+
+    const getLunchExtrasUnit = (extras: any): number => {
+      if (!isLunch(extras)) return 0;
+      const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
+      const extraMeats = Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0;
+      const paidSidesTotal = Array.isArray(extras?.paidSides)
+        ? extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0)
+        : 0;
+      const regularExtrasTotal = Array.isArray(extras?.regularExtras)
+        ? extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0)
+        : 0;
+      return extraMeats * meatUnit + paidSidesTotal + regularExtrasTotal;
+    };
+
+    const subtotal = items.reduce((sum, item) => {
+      const qty = Number(item.quantity) || 1;
+      const extras = item.extras as any;
+      const lunch = isLunch(extras);
+
+      const unitBase = lunch ? (Number(extras?.base?.price) || Number(item.price) || 0) : (Number(item.price) || Number(item.item?.price) || 0);
+      const extrasUnit = lunch ? getLunchExtrasUnit(extras) : sumRegularExtrasUnit(extras);
+
+      return sum + (unitBase + extrasUnit) * qty;
     }, 0);
-    
+
     const deliveryTax = Number(order?.delivery_tax) || 0;
     const total = subtotal + deliveryTax;
-    
-    return { subtotal: Number(subtotal.toFixed(2)), deliveryTax, total: Number(total.toFixed(2)) };
+
+    return {
+      subtotal: Number(subtotal.toFixed(2)),
+      deliveryTax,
+      total: Number(total.toFixed(2)),
+    };
   };
 
   const handleSave = async () => {

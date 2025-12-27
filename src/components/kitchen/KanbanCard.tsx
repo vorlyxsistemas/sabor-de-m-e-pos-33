@@ -67,21 +67,33 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
   const typeConfig = orderTypeConfig[order.order_type] || orderTypeConfig.local;
   const wasModified = !!order.last_modified_at;
 
-  const itemsSummary = order.order_items
-    ?.map((oi) => {
-      const extras = oi.extras as any;
-      const isLunch = extras?.type === "lunch";
-      if (isLunch) {
-        const baseName = extras?.base?.name || "Base";
-        return `${oi.quantity}x Almoço (${baseName})`;
-      }
+  const orderItems = Array.isArray(order.order_items) ? order.order_items : [];
 
-      // Ensure we always have a name - check multiple sources
-      const name = oi.item?.name || extras?.itemName || "Item";
-      const variation = extras?.selected_variation;
-      return variation ? `${oi.quantity}x ${name} (${variation})` : `${oi.quantity}x ${name}`;
-    })
-    .join(", ") || "Sem itens";
+  const itemsSummary =
+    orderItems.length === 0
+      ? "Sem itens"
+      : (orderItems
+          .map((oi) => {
+            const qty = Number(oi.quantity) || 1;
+            const extras = oi.extras as any;
+
+            const isLunch = extras?.type === "lunch";
+            if (isLunch) {
+              const baseName = extras?.base?.name || "Base";
+              return `${qty}x Almoço (${baseName})`;
+            }
+
+            const name =
+              oi.item?.name ||
+              extras?.itemName ||
+              extras?.name ||
+              "Item não identificado";
+
+            const variation = extras?.selected_variation;
+            return variation ? `${qty}x ${name} (${variation})` : `${qty}x ${name}`;
+          })
+          .filter(Boolean)
+          .join(", ") || "Item não identificado");
 
   const handleCancelConfirm = async (reason: string) => {
     if (!onCancel) return;

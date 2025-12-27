@@ -74,37 +74,25 @@ const Kitchen = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data, error } = await (supabase as any)
-        .from("orders")
-        .select(`
-          id,
-          customer_name,
-          customer_phone,
-          status,
-          order_type,
-          table_number,
-          address,
-          bairro,
-          cep,
-          reference,
-          subtotal,
-          delivery_tax,
-          extras_fee,
-          total,
-          created_at,
-          scheduled_for,
-          payment_method,
-          troco,
-          observations,
-          printed,
-          order_items(item_id, quantity, price, extras, tapioca_molhada, item:items(name))
-        `)
-        .gte("created_at", today.toISOString())
-        .neq("status", "cancelled")
-        .order("created_at");
+      // IMPORTANT: use server-side "orders" function to fetch orders+items reliably (bypasses row-level restrictions)
+      const { data, error } = await supabase.functions.invoke("orders", {
+        method: "GET",
+      });
 
       if (error) throw error;
-      setOrders((data as Order[]) || []);
+      if ((data as any)?.error) throw new Error((data as any).error);
+
+      const allOrders = (((data as any)?.data || []) as Order[]).filter(Boolean);
+
+      const filtered = allOrders
+        .filter((o) => {
+          const createdAt = new Date(o.created_at);
+          return createdAt >= today && o.status !== "cancelled";
+        })
+        // keep same ordering as before (created_at asc)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      setOrders(filtered);
     } catch (error) {
       console.error("Erro ao buscar pedidos:", error);
       toast({

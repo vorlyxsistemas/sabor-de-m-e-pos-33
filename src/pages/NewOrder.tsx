@@ -261,13 +261,19 @@ const NewOrder = () => {
             }
           }
 
+          // IMPORTANT: persist UNIT base price (extras are persisted separately)
+          const extrasUnit = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
+          const unitBasePrice = item.isLunch
+            ? (Number(item.lunchBase?.price) || 0)
+            : Math.max(0, Number(item.price) - extrasUnit);
+
           return {
             order_id: selectedExistingOrder,
             item_id: item.item_id,
             quantity: item.quantity,
             extras: extrasData,
             tapioca_molhada: item.tapioca_molhada,
-            price: item.price * item.quantity,
+            price: unitBasePrice,
           };
         });
 
@@ -346,13 +352,19 @@ const NewOrder = () => {
             }
           }
 
+          // IMPORTANT: persist UNIT base price (extras are persisted separately)
+          const extrasUnit = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
+          const unitBasePrice = item.isLunch
+            ? (Number(item.lunchBase?.price) || 0)
+            : Math.max(0, Number(item.price) - extrasUnit);
+
           return {
             order_id: order.id,
             item_id: item.item_id,
             quantity: item.quantity,
             extras: extrasData,
             tapioca_molhada: item.tapioca_molhada,
-            price: item.price * item.quantity,
+            price: unitBasePrice,
           };
         });
 
