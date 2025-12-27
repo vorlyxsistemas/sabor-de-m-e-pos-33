@@ -13,11 +13,12 @@ import { printReceipt } from "@/lib/printReceipt";
 type OrderStatus = "pending" | "preparing" | "ready" | "delivered" | "cancelled";
 
 interface OrderItem {
+  item_id?: string | null;
   quantity: number;
   price: number;
   extras: any;
   tapioca_molhada: boolean;
-  item: { name: string } | null;
+  item: { id?: string; name: string; price?: number } | null;
 }
 
 interface Order {
@@ -87,38 +88,26 @@ const StaffKanban = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
-      const { data, error } = await (supabase as any)
-        .from("orders")
-        .select(`
-          id,
-          customer_name,
-          customer_phone,
-          status,
-          order_type,
-          table_number,
-          address,
-          bairro,
-          cep,
-          reference,
-          subtotal,
-          delivery_tax,
-          extras_fee,
-          total,
-          created_at,
-          scheduled_for,
-          payment_method,
-          troco,
-          observations,
-          last_modified_at,
-          order_items(quantity, price, extras, tapioca_molhada, item:items(name))
-        `)
-        .gte("created_at", today.toISOString())
-        .neq("status", "cancelled")
-        .order("created_at");
+      // Use edge function to fetch orders with items (bypasses RLS issues)
+      const { data, error } = await supabase.functions.invoke("orders", {
+        method: "GET",
+      });
 
       if (error) throw error;
-      setOrders((data as Order[]) || []);
+      if ((data as any)?.error) throw new Error((data as any).error);
+
+      const allOrders = (((data as any)?.data || []) as Order[]).filter(Boolean);
+
+      // Filter for today and non-cancelled
+      const filtered = allOrders
+        .filter((o) => {
+          const createdAt = new Date(o.created_at);
+          return createdAt >= today && o.status !== "cancelled";
+        })
+        // keep same ordering as before (created_at asc)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      setOrders(filtered);
     } catch (error) {
       console.error("Erro ao buscar pedidos:", error);
       toast({
@@ -166,35 +155,16 @@ const StaffKanban = () => {
           });
           const shouldPrint = settings?.auto_print_enabled || false;
 
-          // @ts-ignore - bairro/payment_method/troco columns exist but types are not updated
-          const { data: newOrder } = await (supabase as any)
-            .from("orders")
-            .select(`
-              id,
-              customer_name,
-              customer_phone,
-              status,
-              order_type,
-              address,
-              bairro,
-              cep,
-              reference,
-              subtotal,
-              delivery_tax,
-              extras_fee,
-              total,
-              created_at,
-              scheduled_for,
-              payment_method,
-              troco,
-              observations,
-              order_items(quantity, price, extras, tapioca_molhada, item:items(name))
-            `)
-            .eq("id", payload.new.id)
-            .single();
+          // Fetch the new order via edge function to get complete data with item names
+          const { data: ordersData } = await supabase.functions.invoke("orders", {
+            method: "GET",
+          });
 
-          if (newOrder && (newOrder as any).status === "pending") {
-            autoPrintPendingOrders([newOrder as Order], shouldPrint);
+          const allOrders = (((ordersData as any)?.data || []) as Order[]).filter(Boolean);
+          const newOrder = allOrders.find((o) => o.id === payload.new.id);
+
+          if (newOrder && newOrder.status === "pending") {
+            autoPrintPendingOrders([newOrder], shouldPrint);
           }
           fetchOrders();
         }
