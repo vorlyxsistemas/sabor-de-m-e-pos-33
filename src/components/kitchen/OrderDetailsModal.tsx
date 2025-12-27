@@ -68,10 +68,9 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
   const [resolvedItemNames, setResolvedItemNames] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
-  if (!order) return null;
-
+  // useEffect MUST come before any conditional return
   useEffect(() => {
-    if (!open) return;
+    if (!open || !order) return;
 
     const missingIds = Array.from(
       new Set(
@@ -103,7 +102,10 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
       });
       setResolvedItemNames(map);
     })();
-  }, [open, order.id]);
+  }, [open, order?.id]);
+
+  // Early return AFTER all hooks
+  if (!order) return null;
 
   const getResolvedOrderForPrint = () => {
     return {
