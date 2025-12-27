@@ -52,12 +52,35 @@ export function generateReceiptHTML(order: Order): string {
     const isLunch = extras?.type === "lunch";
     const itemName = item.item?.name || (isLunch ? `ALMOÇO - ${extras?.base?.name}` : "ITEM");
 
+    const qty = Number(item.quantity) || 1;
+    let unitBase = Number(item.price) || 0;
+    let extrasUnit = 0;
+
+    if (isLunch) {
+      const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
+      unitBase = Number(extras?.base?.price) || unitBase;
+      extrasUnit += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
+      if (Array.isArray(extras?.paidSides)) {
+        extrasUnit += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
+      }
+      if (Array.isArray(extras?.regularExtras)) {
+        extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+      }
+    } else if (extras && typeof extras === 'object' && !Array.isArray(extras) && Array.isArray(extras?.regularExtras)) {
+      extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+    } else if (Array.isArray(extras)) {
+      extrasUnit += extras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+    }
+
+    const lineTotal = (unitBase + extrasUnit) * qty;
+
     itemsHTML += `
       <div style="margin-bottom: 10px;">
         <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 14px;">
-          <span>${item.quantity}x ${itemName.toUpperCase()}${item.tapioca_molhada ? " (MOLHADA)" : ""}</span>
-          <span>R$${item.price.toFixed(2)}</span>
+          <span>${qty}x ${itemName.toUpperCase()}${item.tapioca_molhada ? " (MOLHADA)" : ""}</span>
+          <span>R$${lineTotal.toFixed(2)}</span>
         </div>
+        ${qty > 1 ? `<div style="padding-left: 12px; font-size: 11px; font-weight: 700; color: #555;">(R$${unitBase.toFixed(2)} cada)</div>` : ""}
     `;
 
     // Selected Variation
@@ -441,12 +464,38 @@ export function generateESCPOSCommands(order: Order): Uint8Array {
     const extras = item.extras as any;
     const isLunch = extras?.type === "lunch";
     const itemName = item.item?.name || (isLunch ? `ALMOCO - ${extras?.base?.name}` : "ITEM");
-    
+
+    const qty = Number(item.quantity) || 1;
+    let unitBase = Number(item.price) || 0;
+    let extrasUnit = 0;
+
+    if (isLunch) {
+      const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
+      unitBase = Number(extras?.base?.price) || unitBase;
+      extrasUnit += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
+      if (Array.isArray(extras?.paidSides)) {
+        extrasUnit += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
+      }
+      if (Array.isArray(extras?.regularExtras)) {
+        extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+      }
+    } else if (extras && typeof extras === 'object' && !Array.isArray(extras) && Array.isArray(extras?.regularExtras)) {
+      extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+    } else if (Array.isArray(extras)) {
+      extrasUnit += extras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+    }
+
+    const lineTotal = (unitBase + extrasUnit) * qty;
+
     commands.push(ESC, 0x21, 0x18); // Double height + bold
-    commands.push(...encoder.encode(`${item.quantity}x ${itemName.toUpperCase()}`));
+    commands.push(...encoder.encode(`${qty}x ${itemName.toUpperCase()}`));
     if (item.tapioca_molhada) commands.push(...encoder.encode(" (MOLHADA)"));
-    commands.push(...encoder.encode(` R$${item.price.toFixed(2)}\n`));
+    commands.push(...encoder.encode(` R$${lineTotal.toFixed(2)}\n`));
     commands.push(ESC, 0x21, 0x08); // Bold only
+
+    if (qty > 1) {
+      commands.push(...encoder.encode(`  (R$${unitBase.toFixed(2)} cada)\n`));
+    }
     
     // Selected variation
     if (!isLunch && extras?.selected_variation) {

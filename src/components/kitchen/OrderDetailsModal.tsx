@@ -4,10 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Printer, MapPin, Phone, User, Clock, CreditCard, Copy, Check } from "lucide-react";
 import { format } from "date-fns";
 import { printReceipt } from "@/lib/printReceipt";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OrderItem {
+  item_id?: string | null;
   quantity: number;
   price: number;
   extras: any;
@@ -63,9 +65,58 @@ const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
 
 export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetailsModalProps) {
   const [copiedPix, setCopiedPix] = useState(false);
+  const [resolvedItemNames, setResolvedItemNames] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   if (!order) return null;
+
+  useEffect(() => {
+    if (!open) return;
+
+    const missingIds = Array.from(
+      new Set(
+        (order.order_items || [])
+          .filter((oi) => !!oi.item_id && !oi.item?.name)
+          .map((oi) => oi.item_id as string)
+      )
+    );
+
+    if (missingIds.length === 0) {
+      setResolvedItemNames({});
+      return;
+    }
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("items")
+        .select("id,name")
+        .in("id", missingIds);
+
+      if (error) {
+        console.warn("Não foi possível carregar nomes de itens faltantes:", error);
+        return;
+      }
+
+      const map: Record<string, string> = {};
+      (data || []).forEach((it: any) => {
+        if (it?.id && it?.name) map[it.id] = it.name;
+      });
+      setResolvedItemNames(map);
+    })();
+  }, [open, order.id]);
+
+  const getResolvedOrderForPrint = () => {
+    return {
+      ...order,
+      order_items: (order.order_items || []).map((oi) => {
+        if (oi.item?.name) return oi;
+        const id = oi.item_id || undefined;
+        const name = id ? resolvedItemNames[id] : undefined;
+        if (!name) return oi;
+        return { ...oi, item: { name } };
+      }),
+    } as Order;
+  };
 
   const orderNumber = order.id.slice(-6).toUpperCase();
   const paymentRaw = (order.payment_method || "").trim();
@@ -73,7 +124,7 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
   const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "Não informado");
 
   const handlePrint = () => {
-    printReceipt(order);
+    printReceipt(getResolvedOrderForPrint());
   };
 
   const handleCopyPix = async () => {
@@ -180,17 +231,50 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                       : (Array.isArray(extras?.regularExtras) ? extras.regularExtras : []))
                   : [];
 
+                // Name fallback (resolve by item_id if join returned null)
+                const resolvedName =
+                  item.item?.name ||
+                  (isLunch ? `Almoço - ${extras?.base?.name}` : undefined) ||
+                  (item.item_id ? resolvedItemNames[item.item_id] : undefined) ||
+                  "Item";
+
+                // Line total calculation (quantity applied ONCE)
+                const qty = Number(item.quantity) || 1;
+                let unitBase = Number(item.price) || 0;
+                let extrasUnit = 0;
+
+                if (isLunch) {
+                  const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
+                  unitBase = Number(extras?.base?.price) || unitBase;
+                  extrasUnit += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
+                  if (Array.isArray(extras?.paidSides)) {
+                    extrasUnit += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
+                  }
+                  if (Array.isArray(extras?.regularExtras)) {
+                    extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+                  }
+                } else {
+                  if (Array.isArray(regularExtras)) {
+                    extrasUnit += regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+                  }
+                }
+
+                const lineTotal = (unitBase + extrasUnit) * qty;
+
                 return (
                   <div key={idx} className="border-b border-border/50 last:border-0 pb-2 last:pb-0">
                     <div className="flex justify-between text-sm">
                       <span className="font-medium">
-                        {item.quantity}x {item.item?.name || (isLunch ? `Almoço - ${extras?.base?.name}` : "Item")}
+                        {qty}x {resolvedName}
                         {item.tapioca_molhada && " (molhada)"}
                       </span>
-                      <span className="text-muted-foreground">
-                        R$ {item.price.toFixed(2)}
-                      </span>
+                      <span className="text-muted-foreground">R$ {lineTotal.toFixed(2)}</span>
                     </div>
+                    {qty > 1 && (
+                      <div className="text-[11px] text-muted-foreground pl-2">
+                        (R$ {unitBase.toFixed(2)} cada)
+                      </div>
+                    )}
                     
                     {/* Selected Variation (e.g., type of broth) */}
                     {!isLunch && extras?.selected_variation && (
@@ -273,7 +357,7 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
             <Printer className="h-4 w-4 mr-2" />
             Imprimir Comanda
           </Button>
-          <Button onClick={() => onPrint(order)} className="flex-1" variant="secondary">
+          <Button onClick={() => onPrint(getResolvedOrderForPrint())} className="flex-1" variant="secondary">
             <Printer className="h-4 w-4 mr-2" />
             Visualizar
           </Button>

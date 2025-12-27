@@ -11,9 +11,10 @@ const corsHeaders = {
 const uuidSchema = z.string().uuid("ID inválido");
 
 const updateOrderItemSchema = z.object({
-  item_id: z.union([uuidSchema, z.null()]).optional(),
+  // REQUIRED: uuid for normal items, null ONLY for lunch items
+  item_id: z.union([uuidSchema, z.null()]),
   quantity: z.number().int().min(1).max(50),
-  price: z.number().min(0).max(9999.99), // This is UNIT price
+  price: z.number().min(0).max(9999.99), // This is UNIT price (may be ignored for lunch)
   extras: z.any().optional().default([]),
   tapioca_molhada: z.boolean().optional().default(false),
 });
@@ -36,88 +37,117 @@ async function hasRole(supabase: any, userId: string, role: "admin" | "staff") {
   return data === true;
 }
 
-// Calculate extras price from extras object/array
-// NOTE: extras are calculated SEPARATELY and added to unitPrice
-// The item.price should be the BASE price only, NOT including extras
-function calculateExtrasPrice(extras: any): number {
-  if (!extras) return 0;
-  
-  let extrasPrice = 0;
-  
-  if (typeof extras === 'object' && !Array.isArray(extras)) {
-    // Lunch item with extras object
-    if (extras.type === 'lunch') {
-      // Extra meats cost R$3 each (almoço extras)
-      const extraMeats = extras.extraMeats || [];
-      extrasPrice += extraMeats.length * 3;
-      
-      // Paid sides cost
-      const paidSides = extras.paidSides || [];
-      paidSides.forEach((side: any) => {
-        extrasPrice += Number(side.price) || 0;
-      });
-      
-      console.log(`Lunch extras: extraMeats=${extraMeats.length} (R$${extraMeats.length * 3}), paidSides=${paidSides.length}`);
-    }
-  } else if (Array.isArray(extras)) {
-    // Regular extras array
-    extras.forEach((extra: any) => {
-      extrasPrice += Number(extra.price) || 0;
-    });
-    if (extras.length > 0) {
-      console.log(`Regular extras: count=${extras.length}, total=R$${extrasPrice}`);
-    }
+function isLunchExtras(extras: any): extras is {
+  type: 'lunch'
+  base?: { name?: string; price?: number; singleMeatPrice?: number }
+  meats?: string[]
+  extraMeats?: string[]
+  sides?: string[]
+  paidSides?: { name?: string; price?: number }[]
+  regularExtras?: { name?: string; price?: number }[]
+} {
+  return (
+    !!extras &&
+    typeof extras === 'object' &&
+    !Array.isArray(extras) &&
+    (extras as any).type === 'lunch'
+  )
+}
+
+function isVariationExtras(extras: any): extras is {
+  selected_variation?: string
+  regularExtras?: { name?: string; price?: number }[]
+} {
+  return !!extras && typeof extras === 'object' && !Array.isArray(extras) && (extras as any).type !== 'lunch'
+}
+
+function sumExtrasArray(extrasArr: any[]): number {
+  let total = 0
+  for (const e of extrasArr) total += Number(e?.price) || 0
+  return total
+}
+
+function getLunchExtraMeatUnitPrice(lunchExtras: any): number {
+  // Production behavior: legacy uses R$6 per extra meat. If base.singleMeatPrice exists, prefer it.
+  const fromPayload = Number(lunchExtras?.base?.singleMeatPrice)
+  return Number.isFinite(fromPayload) && fromPayload > 0 ? fromPayload : 6
+}
+
+function calculateExtrasUnitPrice(extras: any): number {
+  if (!extras) return 0
+
+  // Lunch extras (per unit)
+  if (isLunchExtras(extras)) {
+    const extraMeatsCount = Array.isArray(extras.extraMeats) ? extras.extraMeats.length : 0
+    const meatUnit = getLunchExtraMeatUnitPrice(extras)
+    const paidSidesTotal = Array.isArray(extras.paidSides)
+      ? extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0)
+      : 0
+    const regularExtrasTotal = Array.isArray(extras.regularExtras) ? sumExtrasArray(extras.regularExtras as any[]) : 0
+
+    const extrasUnit = extraMeatsCount * meatUnit + paidSidesTotal + regularExtrasTotal
+
+    console.log(
+      `Lunch extras (unit): extraMeats=${extraMeatsCount}×${meatUnit}, paidSides=R$${paidSidesTotal.toFixed(2)}, regularExtras=R$${regularExtrasTotal.toFixed(2)}, total=R$${extrasUnit.toFixed(2)}`
+    )
+
+    return extrasUnit
   }
-  
-  return extrasPrice;
+
+  // Variation object with regularExtras
+  if (isVariationExtras(extras) && Array.isArray((extras as any).regularExtras)) {
+    const unit = sumExtrasArray((extras as any).regularExtras)
+    if (unit > 0) console.log(`Variation regularExtras (unit): R$${unit.toFixed(2)}`)
+    return unit
+  }
+
+  // Regular extras array
+  if (Array.isArray(extras)) {
+    const unit = sumExtrasArray(extras)
+    if (unit > 0) console.log(`Regular extras array (unit): count=${extras.length}, total=R$${unit.toFixed(2)}`)
+    return unit
+  }
+
+  return 0
 }
 
 /**
  * CRITICAL: Always recalculate totals from items - NEVER trust frontend values
- * 
- * CALCULATION RULE (DO NOT CHANGE):
- * - Each item has: unitPrice (base price) + extrasPrice
- * - Line total = (unitPrice + extrasPrice) × quantity
- * - subtotal = SUM of all line totals
- * - total = subtotal + deliveryTax
- * 
- * IMPORTANT: quantity is applied ONCE per item, never twice!
+ *
+ * Rule: total = SUM( (unitBase + extrasUnit) × quantity ) + deliveryTax
+ * IMPORTANT: quantity is applied ONCE per item.
  */
 function calculateOrderTotals(items: any[], deliveryTax: number = 0): { subtotal: number; total: number } {
-  // ALWAYS reset to zero - NEVER use accumulated values
-  let subtotal = 0;
-  
-  console.log(`\n=== CALCULATING ORDER TOTALS (${items.length} items) ===`);
-  
+  let subtotal = 0
+
+  console.log(`\n=== CALCULATING ORDER TOTALS (${items.length} items) ===`)
+
   for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    
-    // Get unit price (this is the BASE price per unit, without quantity multiplication)
-    const unitPrice = Number(item.price) || 0;
-    
-    // Get quantity (must be at least 1)
-    const quantity = Number(item.quantity) || 1;
-    
-    // Calculate extras price (this is PER UNIT, will be multiplied by quantity below)
-    const extrasPrice = calculateExtrasPrice(item.extras);
-    
-    // CRITICAL: Line total formula - quantity applied ONCE
-    // lineTotal = (unitPrice + extrasPrice) × quantity
-    const lineTotal = (unitPrice + extrasPrice) * quantity;
-    
-    // Add to subtotal (simple addition, no multiplication here)
-    subtotal += lineTotal;
-    
-    console.log(`Item ${i + 1}: unitPrice=R$${unitPrice.toFixed(2)}, extras=R$${extrasPrice.toFixed(2)}, qty=${quantity}, lineTotal=R$${lineTotal.toFixed(2)}`);
+    const item = items[i]
+    const quantity = Number(item.quantity) || 1
+
+    const extras = item.extras
+
+    // For lunch: compute base from extras.base.price when available (prevents double counting when item.price already includes extras)
+    const isLunch = isLunchExtras(extras) && item.item_id === null
+    const unitBase = isLunch ? (Number(extras?.base?.price) || Number(item.price) || 0) : (Number(item.price) || 0)
+
+    const extrasUnit = calculateExtrasUnitPrice(extras)
+
+    const lineTotal = (unitBase + extrasUnit) * quantity
+    subtotal += lineTotal
+
+    console.log(
+      `Item ${i + 1}: isLunch=${isLunch}, unitBase=R$${unitBase.toFixed(2)}, extrasUnit=R$${extrasUnit.toFixed(2)}, qty=${quantity}, lineTotal=R$${lineTotal.toFixed(2)}`
+    )
   }
-  
-  // Round to 2 decimal places to avoid floating point issues
-  subtotal = Math.round(subtotal * 100) / 100;
-  const total = Math.round((subtotal + deliveryTax) * 100) / 100;
-  
-  console.log(`=== FINAL: subtotal=R$${subtotal.toFixed(2)}, deliveryTax=R$${deliveryTax.toFixed(2)}, total=R$${total.toFixed(2)} ===\n`);
-  
-  return { subtotal, total };
+
+  subtotal = Math.round(subtotal * 100) / 100
+  const total = Math.round((subtotal + deliveryTax) * 100) / 100
+
+  console.log(`=== FINAL: subtotal=R$${subtotal.toFixed(2)}, deliveryTax=R$${deliveryTax.toFixed(2)}, total=R$${total.toFixed(2)} ===\n`)
+
+  return { subtotal, total }
 }
 
 serve(async (req) => {
@@ -192,6 +222,18 @@ serve(async (req) => {
 
     const body = bodyResult.data;
     const orderId = body.id;
+
+    // Guardrail: prevent saving non-lunch items with item_id=null (this causes missing names later)
+    for (let i = 0; i < body.items.length; i++) {
+      const it = body.items[i] as any;
+      const isLunch = it.item_id === null && isLunchExtras(it.extras);
+      if (it.item_id === null && !isLunch) {
+        return new Response(JSON.stringify({ error: `Item inválido na posição ${i + 1}: item_id ausente` }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     console.log("Updating order:", orderId, "with", body.items.length, "items");
 
