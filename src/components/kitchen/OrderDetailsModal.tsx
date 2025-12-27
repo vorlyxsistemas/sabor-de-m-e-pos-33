@@ -273,8 +273,8 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
             </div>
 
 
-          {/* Observações */}
-          {order.observations && (
+          {/* Observações - always show when present, regardless of order source */}
+          {order.observations && order.observations.trim() && (
             <div className="bg-accent/20 border border-border/50 rounded-lg p-3 space-y-1">
               <div className="text-sm font-medium">Observações</div>
               <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words">{order.observations}</p>

@@ -140,9 +140,9 @@ export function generateReceiptHTML(order: Order): string {
     </div>
   `;
 
-  // Observations section
+  // Observations section - always show when present, regardless of order source
   let observationsSection = "";
-  if (order.observations) {
+  if (order.observations && order.observations.trim()) {
     observationsSection = `
       <div style="margin-top: 12px; border: 3px solid #000; padding: 10px; background: #fff;">
         <div style="font-weight: 900; font-size: 14px;">★ OBSERVAÇÕES:</div>
@@ -557,8 +557,8 @@ export function generateESCPOSCommands(order: Order): Uint8Array {
   commands.push(ESC, 0x21, 0x08);
   commands.push(...encoder.encode("================================\n"));
   
-  // Observations
-  if (order.observations) {
+  // Observations - always show when present, regardless of order source
+  if (order.observations && order.observations.trim()) {
     commands.push(LF);
     commands.push(ESC, 0x21, 0x18);
     commands.push(...encoder.encode("OBSERVACOES:\n"));

@@ -683,9 +683,13 @@ Deno.serve(async (req) => {
       const total = subtotal + deliveryFee
 
       console.log(`Order totals - Subtotal: R$${subtotal}, Extras: R$${extrasTotal}, Delivery: R$${deliveryFee}, Total: R$${total}`)
-      console.log(`Order observations: "${body.observations || '(nenhuma)'}"`)
+      // IMPORTANT: Ensure observations are properly captured and logged
+      const observationsToSave = (body.observations && typeof body.observations === 'string' && body.observations.trim()) 
+        ? body.observations.trim() 
+        : null
+      console.log(`Order observations raw: "${body.observations}", processed: "${observationsToSave || '(nenhuma)'}"`)
 
-      // Create order
+      // Create order - observations field is critical for customer orders
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -705,7 +709,7 @@ Deno.serve(async (req) => {
           payment_method: body.payment_method || null,
           troco: body.troco || null,
           user_id: userId,
-          observations: body.observations || null
+          observations: observationsToSave
         })
         .select()
         .single()
@@ -715,7 +719,7 @@ Deno.serve(async (req) => {
         throw orderError
       }
 
-      console.log('Order created:', order.id, 'with user_id:', userId)
+      console.log('Order created:', order.id, 'with user_id:', userId, 'observations saved:', order.observations ? 'YES' : 'NO')
 
       // Create order items
       const orderItems = orderItemsData.map((item) => ({
@@ -754,6 +758,9 @@ Deno.serve(async (req) => {
         .single()
 
       if (fetchError) throw fetchError
+
+      // Log to verify observations are in the response
+      console.log('Complete order response - observations present:', completeOrder.observations ? 'YES' : 'NO', '- value:', completeOrder.observations || '(empty)')
 
       return new Response(
         JSON.stringify({ 

@@ -25,6 +25,7 @@ interface Order {
   order_items: OrderItem[];
   observations?: string | null;
   last_modified_at?: string | null;
+  // Note: observations field must be present for customer orders too
 }
 
 interface KanbanCardProps {
@@ -150,8 +151,8 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
             {itemsSummary}
           </div>
 
-          {/* Observações */}
-          {order.observations && (
+          {/* Observações - always show when present, regardless of order source */}
+          {order.observations && order.observations.trim() && (
             <div className="mt-1 rounded-md border border-border/50 bg-accent/30 px-2 py-1 text-[12px] text-foreground whitespace-pre-wrap break-words">
               <span className="font-semibold">Observações:</span> {order.observations}
             </div>
