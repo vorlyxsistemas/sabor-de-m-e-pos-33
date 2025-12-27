@@ -140,6 +140,68 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
     }
   };
 
+  const orderItems = Array.isArray(order.order_items) ? order.order_items : [];
+
+  // Some legacy orders were persisted with item.price already as a LINE TOTAL (price×qty and sometimes including extras).
+  // Detect it at order level and normalize display/calculations so quantity is applied only once.
+  const isLegacyLinePrices = (() => {
+    if (orderItems.length === 0) return false;
+
+    const sumExtrasUnit = (extras: any): number => {
+      if (!extras) return 0;
+      if (Array.isArray(extras)) return extras.reduce((s, e) => s + (Number(e?.price) || 0), 0);
+      if (typeof extras === "object" && !Array.isArray(extras) && Array.isArray((extras as any).regularExtras)) {
+        return (extras as any).regularExtras.reduce((s: number, e: any) => s + (Number(e?.price) || 0), 0);
+      }
+      return 0;
+    };
+
+    const isLunch = (extras: any) => !!extras && typeof extras === "object" && !Array.isArray(extras) && (extras as any).type === "lunch";
+
+    const getLunchExtrasUnit = (extras: any): number => {
+      if (!isLunch(extras)) return 0;
+      const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
+      const extraMeats = Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0;
+      const paidSidesTotal = Array.isArray(extras?.paidSides)
+        ? extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0)
+        : 0;
+      const regularExtrasTotal = Array.isArray(extras?.regularExtras)
+        ? extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0)
+        : 0;
+      return extraMeats * meatUnit + paidSidesTotal + regularExtrasTotal;
+    };
+
+    const subtotalAssumingUnitRule = orderItems.reduce((sum, it) => {
+      const qty = Number(it.quantity) || 1;
+      const extras = it.extras as any;
+      const lunch = isLunch(extras);
+
+      const unitBase = lunch ? (Number(extras?.base?.price) || Number(it.price) || 0) : (Number(it.price) || 0);
+      const extrasUnit = lunch ? getLunchExtrasUnit(extras) : sumExtrasUnit(extras);
+
+      return sum + (unitBase + extrasUnit) * qty;
+    }, 0);
+
+    // Line-price legacy: for non-lunch items, DB price already represents the full line total
+    const subtotalAssumingLineRule = orderItems.reduce((sum, it) => {
+      const qty = Number(it.quantity) || 1;
+      const extras = it.extras as any;
+      const lunch = isLunch(extras);
+
+      if (!lunch) return sum + (Number(it.price) || 0);
+
+      const unitBase = Number(extras?.base?.price) || Number(it.price) || 0;
+      const extrasUnit = getLunchExtrasUnit(extras);
+      return sum + (unitBase + extrasUnit) * qty;
+    }, 0);
+
+    const target = Number(order.subtotal) || 0;
+    const diffUnit = Math.abs(subtotalAssumingUnitRule - target);
+    const diffLine = Math.abs(subtotalAssumingLineRule - target);
+
+    return diffLine + 0.01 < diffUnit;
+  })();
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
@@ -223,7 +285,7 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Itens do Pedido</h4>
             <div className="bg-muted/30 rounded-lg p-3 space-y-3">
-              {order.order_items?.map((item, idx) => {
+              {orderItems.map((item, idx) => {
                 const extras = item.extras as any;
                 const isLunch = extras?.type === "lunch";
 
@@ -233,21 +295,21 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                       : (Array.isArray(extras?.regularExtras) ? extras.regularExtras : []))
                   : [];
 
-                // Name fallback (resolve by item_id if join returned null)
+                const qty = Number(item.quantity) || 1;
+
+                // Name fallback (never blank)
                 const resolvedName =
                   item.item?.name ||
-                  (isLunch ? `Almoço - ${extras?.base?.name}` : undefined) ||
+                  (isLunch ? `Almoço - ${extras?.base?.name || "Base"}` : undefined) ||
                   (item.item_id ? resolvedItemNames[item.item_id] : undefined) ||
-                  "Item";
+                  extras?.itemName ||
+                  extras?.name ||
+                  "Item não identificado";
 
-                // Line total calculation (quantity applied ONCE)
-                const qty = Number(item.quantity) || 1;
-                let unitBase = Number(item.price) || 0;
+                // Extras (per unit)
                 let extrasUnit = 0;
-
                 if (isLunch) {
                   const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
-                  unitBase = Number(extras?.base?.price) || unitBase;
                   extrasUnit += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
                   if (Array.isArray(extras?.paidSides)) {
                     extrasUnit += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
@@ -256,12 +318,23 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                     extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
                   }
                 } else {
-                  if (Array.isArray(regularExtras)) {
-                    extrasUnit += regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
-                  }
+                  extrasUnit += regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
                 }
 
-                const lineTotal = (unitBase + extrasUnit) * qty;
+                // Unit base price (quantity applied ONCE)
+                let unitBase = 0;
+                if (isLunch) {
+                  unitBase = Number(extras?.base?.price) || Number(item.price) || 0;
+                } else if (isLegacyLinePrices && qty > 0) {
+                  // legacy: item.price is line total -> convert to unit base (excluding extras)
+                  unitBase = (Number(item.price) || 0) / qty - extrasUnit;
+                } else {
+                  unitBase = Number(item.price) || 0;
+                }
+
+                unitBase = Math.max(0, Math.round(unitBase * 100) / 100);
+                const unitTotal = unitBase + extrasUnit;
+                const lineTotal = unitTotal * qty;
 
                 return (
                   <div key={idx} className="border-b border-border/50 last:border-0 pb-2 last:pb-0">
@@ -274,7 +347,7 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
                     </div>
                     {qty > 1 && (
                       <div className="text-[11px] text-muted-foreground pl-2">
-                        (R$ {unitBase.toFixed(2)} cada)
+                        (R$ {unitTotal.toFixed(2)} cada)
                       </div>
                     )}
                     
