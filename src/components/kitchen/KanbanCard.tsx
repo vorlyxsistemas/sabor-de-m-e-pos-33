@@ -114,9 +114,9 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
         className="w-full max-w-full min-h-[130px] bg-white border border-border/50 rounded-xl p-4 flex flex-col justify-between gap-1.5 overflow-hidden shadow-sm transition-shadow box-border relative z-[1]"
       >
         {/* Top: Order ID + Badge + Modified indicator */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm text-foreground/80 truncate">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold text-sm text-foreground/80">
               #{orderNumber}
             </span>
             {wasModified && (
@@ -126,13 +126,15 @@ export function KanbanCard({ order, onAdvance, onViewDetails, onCancel, onEdit, 
             )}
           </div>
           <div
-            className={`flex items-center gap-1 px-1.5 h-5 rounded-full text-xs font-medium shrink-0 ${typeConfig.bgColor} ${typeConfig.textColor}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${typeConfig.bgColor} ${typeConfig.textColor}`}
           >
             {typeConfig.icon}
-            <span>{typeConfig.label}</span>
-            {order.order_type === 'local' && order.table_number && (
-              <span className="ml-1">Mesa {order.table_number}</span>
-            )}
+            <span>
+              {typeConfig.label}
+              {order.order_type === 'local' && order.table_number && (
+                <span className="ml-1">· Mesa {order.table_number}</span>
+              )}
+            </span>
           </div>
         </div>
 
