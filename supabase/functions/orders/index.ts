@@ -122,21 +122,30 @@ async function verifyRole(supabase: any, userId: string, role: string): Promise<
 async function getAuthenticatedStaffUser(req: Request, supabase: any): Promise<{ user: any; error?: string }> {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
+    console.error('No authorization header provided');
     return { user: null, error: 'Não autorizado' };
   }
 
   const token = authHeader.replace('Bearer ', '');
+  console.log('Validating token for orders...');
+  
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
   if (authError || !user) {
+    console.error('Auth error details:', authError?.message, authError?.status);
     return { user: null, error: 'Token inválido' };
   }
 
+  console.log('User authenticated:', user.id, user.email);
+
   // Check if user is admin or staff
-  const isAdmin = await verifyRole(supabase, user.id, 'admin');
-  const isStaff = await verifyRole(supabase, user.id, 'staff');
+  const [isAdmin, isStaff] = await Promise.all([
+    verifyRole(supabase, user.id, 'admin'),
+    verifyRole(supabase, user.id, 'staff'),
+  ]);
 
   if (!isAdmin && !isStaff) {
+    console.error('User does not have admin or staff role:', user.id);
     return { user: null, error: 'Acesso negado. Apenas administradores e funcionários.' };
   }
 
