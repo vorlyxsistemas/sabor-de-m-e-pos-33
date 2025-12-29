@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.create-order-from-ai]
 verify_jwt = false
+
+[functions.auto-print-order]
+verify_jwt = false
