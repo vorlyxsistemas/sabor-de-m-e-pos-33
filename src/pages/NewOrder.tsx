@@ -370,7 +370,54 @@ const NewOrder = () => {
 
         await supabase.from('order_items').insert(orderItems);
 
-        toast({ title: "Pedido criado com sucesso!" });
+        // Tentar impressão automática via Print Server local (não bloqueia o fluxo)
+        try {
+          const printData = {
+            order_id: order.id,
+            table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
+            customer_name: customerName,
+            order_type: orderType,
+            items: cart.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              unit_price: item.price,
+              subtotal: item.price * item.quantity,
+              extras: item.extras,
+              notes: item.isLunch ? `Carnes: ${item.lunchMeats?.join(', ') || ''}, Acomp: ${item.lunchSides?.join(', ') || ''}` : null
+            })),
+            notes: observations.trim() || null,
+            subtotal,
+            delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+            total,
+            payment_method: paymentMethod,
+            created_at: new Date().toISOString()
+          };
+
+          const printResponse = await fetch('http://localhost:5000/print', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(printData)
+          });
+
+          if (!printResponse.ok) {
+            console.warn('Print Server retornou erro:', printResponse.status);
+            toast({ 
+              title: "Pedido criado!", 
+              description: "Impressão automática falhou - use o botão Imprimir Comanda",
+              variant: "default" 
+            });
+          } else {
+            toast({ title: "Pedido criado e impresso automaticamente!" });
+          }
+        } catch (printError) {
+          console.warn('Print Server offline ou inacessível:', printError);
+          toast({ 
+            title: "Pedido criado com sucesso!", 
+            description: "Impressora offline - use o botão Imprimir Comanda se necessário",
+            variant: "default" 
+          });
+        }
+
         navigate(isAdmin ? '/admin/kanban' : '/kitchen');
       }
     } catch (error: any) {
