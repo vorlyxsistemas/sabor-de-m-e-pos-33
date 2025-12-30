@@ -374,7 +374,7 @@ const NewOrder = () => {
         try {
           const printData = {
             order_id: order.id,
-            table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
+            table: orderType === 'local' && tableNumber ? `Mesa ${tableNumber}` : (orderType === 'entrega' ? 'Entrega' : 'Balcão'),
             customer_name: customerName,
             order_type: orderType,
             items: cart.map(item => ({
