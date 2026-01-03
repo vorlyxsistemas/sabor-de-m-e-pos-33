@@ -205,7 +205,53 @@ const NewOrder = () => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // CRITICAL: Calculate totals correctly
+  // subtotal = sum of (unitBasePrice + extrasUnit) * quantity for each item
+  const calculateTotals = () => {
+    let itemsSubtotal = 0;
+    let extrasTotal = 0;
+
+    for (const item of cart) {
+      const quantity = item.quantity || 1;
+      
+      // Calculate extras unit price
+      let extrasUnit = 0;
+      
+      if (item.isLunch) {
+        // Lunch extras: extraMeats (R$6 each) + paidSides + regularExtras
+        const extraMeatsCount = item.lunchExtraMeats?.length || 0;
+        const paidSidesTotal = (item.lunchPaidSides || []).reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
+        const regularExtrasTotal = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
+        extrasUnit = (extraMeatsCount * 6) + paidSidesTotal + regularExtrasTotal;
+        
+        // Base price for lunch
+        const basePrice = Number(item.lunchBase?.price) || 0;
+        const lineTotal = (basePrice + extrasUnit) * quantity;
+        itemsSubtotal += lineTotal;
+        extrasTotal += extrasUnit * quantity;
+      } else {
+        // Regular items: extras array
+        extrasUnit = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
+        
+        // Tapioca molhada adds R$1
+        const tapiocaExtra = item.tapioca_molhada ? 1 : 0;
+        extrasUnit += tapiocaExtra;
+        
+        // Base price is item.price minus extras (since item.price in cart already includes extras)
+        const basePrice = Math.max(0, Number(item.price) - extrasUnit);
+        const lineTotal = (basePrice + extrasUnit) * quantity;
+        itemsSubtotal += lineTotal;
+        extrasTotal += extrasUnit * quantity;
+      }
+    }
+
+    return { 
+      subtotal: Math.round(itemsSubtotal * 100) / 100,
+      extrasTotal: Math.round(extrasTotal * 100) / 100
+    };
+  };
+
+  const { subtotal, extrasTotal } = calculateTotals();
   const total = subtotal + (orderType === 'entrega' && !addToExisting ? deliveryTax : 0);
 
   const handleSubmit = async () => {
@@ -310,6 +356,7 @@ const NewOrder = () => {
             bairro: orderType === 'entrega' ? bairro : null,
             reference: orderType === 'entrega' ? reference : null,
             delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+            extras_fee: extrasTotal,
             subtotal,
             total,
             status: 'pending',

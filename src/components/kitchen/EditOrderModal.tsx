@@ -453,9 +453,12 @@ export function EditOrderModal({ open, onOpenChange, order, onOrderUpdated }: Ed
                     let extrasPrice = 0;
                     if (item.extras && typeof item.extras === 'object' && !Array.isArray(item.extras)) {
                       if ((item.extras as any).type === 'lunch') {
-                        extrasPrice += ((item.extras as any).extraMeats || []).length * 3;
+                        extrasPrice += ((item.extras as any).extraMeats || []).length * 6; // R$6 per extra meat
                         ((item.extras as any).paidSides || []).forEach((s: any) => {
                           extrasPrice += Number(s.price) || 0;
+                        });
+                        ((item.extras as any).regularExtras || []).forEach((e: any) => {
+                          extrasPrice += Number(e.price) || 0;
                         });
                       }
                     } else if (Array.isArray(item.extras)) {

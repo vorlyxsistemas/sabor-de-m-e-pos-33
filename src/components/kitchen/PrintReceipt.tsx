@@ -256,15 +256,24 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
              let extrasPrice = 0;
              if (isLunch) {
                const extraMeats = extras?.extraMeats || [];
-               extrasPrice += extraMeats.length * 3;
+               extrasPrice += extraMeats.length * 6; // R$6 per extra meat
                const paidSides = extras?.paidSides || [];
                paidSides.forEach((side: any) => {
                  extrasPrice += Number(side.price) || 0;
+               });
+               const lunchRegularExtras = extras?.regularExtras || [];
+               lunchRegularExtras.forEach((extra: any) => {
+                 extrasPrice += Number(extra.price) || 0;
                });
              } else if (regularExtras.length > 0) {
                regularExtras.forEach((extra: any) => {
                  extrasPrice += Number(extra.price) || 0;
                });
+             }
+             
+             // Add tapioca molhada to extras price
+             if (item.tapioca_molhada) {
+               extrasPrice += 1;
              }
              
              // Unit price is the base price stored in item.price
@@ -369,15 +378,9 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
         {/* Totals */}
         <div style={{ marginTop: '10px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
-            <span>SUBTOTAL:</span>
+            <span>SUBTOTAL (ITENS+EXTRAS):</span>
             <span>R$ {order.subtotal.toFixed(2)}</span>
           </div>
-          {order.extras_fee && order.extras_fee > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
-              <span>EXTRAS:</span>
-              <span>R$ {order.extras_fee.toFixed(2)}</span>
-            </div>
-          )}
           {order.delivery_tax && order.delivery_tax > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
               <span>TAXA ENTREGA:</span>
