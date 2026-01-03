@@ -207,7 +207,33 @@ const CustomerPedido = () => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // CRITICAL: Calculate totals correctly (same as backend)
+  // subtotal = sum of (unitBasePrice + extrasUnit) * quantity for each item
+  const calculateTotals = () => {
+    let itemsSubtotal = 0;
+
+    for (const item of cart) {
+      const quantity = item.quantity || 1;
+      
+      if (item.isLunch) {
+        // Lunch: base price + extras (extraMeats R$6 each + paidSides + regularExtras)
+        const basePrice = Number(item.lunchBase?.price) || 0;
+        const extraMeatsCount = item.lunchExtraMeats?.length || 0;
+        const paidSidesTotal = (item.lunchPaidSides || []).reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
+        const regularExtrasTotal = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
+        const extrasUnit = (extraMeatsCount * 6) + paidSidesTotal + regularExtrasTotal;
+        
+        itemsSubtotal += (basePrice + extrasUnit) * quantity;
+      } else {
+        // Regular items: item.price already includes extras
+        itemsSubtotal += item.price * quantity;
+      }
+    }
+
+    return Math.round(itemsSubtotal * 100) / 100;
+  };
+
+  const subtotal = calculateTotals();
   const total = subtotal + (orderType === 'entrega' ? deliveryTax : 0);
 
   const handleBairroChange = (selectedBairro: string) => {

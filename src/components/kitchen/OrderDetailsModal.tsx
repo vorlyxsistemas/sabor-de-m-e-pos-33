@@ -404,15 +404,9 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
           {/* Totals */}
           <div className="border-t pt-3 space-y-1">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
+              <span className="text-muted-foreground">Subtotal (itens + extras)</span>
               <span>R$ {order.subtotal.toFixed(2)}</span>
             </div>
-            {order.extras_fee && order.extras_fee > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Extras</span>
-                <span>R$ {order.extras_fee.toFixed(2)}</span>
-              </div>
-            )}
             {order.delivery_tax && order.delivery_tax > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Taxa de Entrega</span>
