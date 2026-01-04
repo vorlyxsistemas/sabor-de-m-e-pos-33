@@ -4,11 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 /**
  * Hook para impressão automática de pedidos via Supabase Realtime.
  *
+ * ⚠️ USO: Este hook deve ser chamado SOMENTE no layout/admin da cozinha,
+ *         no notebook conectado à impressora local.
+ *         NÃO usar em App.tsx ou outros layouts.
+ *
  * - Escuta eventos INSERT na tabela "orders"
  * - Envia automaticamente para o Print Server local (IP configurável via env)
  * - Marca o pedido como impresso (printed=true, printed_at) após sucesso
  * - Usa Set em memória para evitar impressões duplicadas
  * - Não interfere nos botões manuais de impressão
+ * - Usa timeout de 5s para evitar travamento de rede
  */
 
 // URL do Print Server via variável de ambiente ou fallback para IP fixo
@@ -100,30 +105,50 @@ export function useAutoPrintRealtime(): void {
             // Preparar dados no formato esperado pelo Print Server
             const orderItems = fullOrder.order_items as Array<Record<string, unknown>> | undefined;
             const printPayload = {
-              order_id: fullOrder.id,
-              table: fullOrder.table_number ?? fullOrder.mesa ?? "",
-              items: orderItems?.map((oi) => ({
+              order_id: fullOrder.id as string,
+              table: String(fullOrder.table_number ?? fullOrder.mesa ?? ""),
+              items: (orderItems ?? []).map((oi) => ({
                 quantity: oi.quantity as number,
                 name: (oi.item as Record<string, unknown>)?.name ?? "Item",
                 notes: (oi.notes as string) ?? "",
               })),
               notes: (fullOrder.notes as string) ?? (fullOrder.observations as string) ?? "",
-              created_at: fullOrder.created_at,
+              created_at: fullOrder.created_at as string,
             };
 
             console.log(`[AutoPrint] Payload enviado:`, printPayload);
             console.log(`[AutoPrint] Enviando pedido ${orderId} para impressão em ${PRINT_SERVER_URL}/print...`);
 
-            // Enviar para o Print Server local
-            const printResponse = await fetch(`${PRINT_SERVER_URL}/print`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(printPayload),
-            });
+            // Usar AbortController com timeout de 5s para evitar travamento
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-            if (!printResponse.ok) {
-              const errorText = await printResponse.text();
-              console.error(`[AutoPrint] Print Server retornou erro para ${orderId}:`, errorText);
+            try {
+              // Enviar para o Print Server local
+              const printResponse = await fetch(`${PRINT_SERVER_URL}/print`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(printPayload),
+                signal: controller.signal,
+              });
+
+              clearTimeout(timeoutId);
+
+              if (!printResponse.ok) {
+                const errorText = await printResponse.text();
+                console.error(`[AutoPrint] Print Server retornou erro para ${orderId}:`, errorText);
+                // Remove do processamento para permitir retry manual
+                processingOrdersRef.current.delete(orderId);
+                // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
+                return;
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              if ((fetchError as Error).name === "AbortError") {
+                console.error(`[AutoPrint] Timeout (5s) ao tentar imprimir pedido ${orderId}`);
+              } else {
+                console.error(`[AutoPrint] Erro de rede ao imprimir pedido ${orderId}:`, fetchError);
+              }
               // Remove do processamento para permitir retry manual
               processingOrdersRef.current.delete(orderId);
               // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
