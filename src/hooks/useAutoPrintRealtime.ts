@@ -16,9 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
  * - Usa timeout de 5s para evitar travamento de rede
  */
 
-// URL do Print Server via variável de ambiente ou fallback para IP fixo
-const PRINT_SERVER_URL =
-  import.meta.env.VITE_PRINT_SERVER_URL || "http://192.168.0.23:5000";
+// URL do Print Server via variável de ambiente (sem fallback - obrigatório configurar)
+const PRINT_SERVER_URL = import.meta.env.VITE_PRINT_SERVER_URL;
 
 export function useAutoPrintRealtime(): void {
   // Set para rastrear pedidos já impressos com sucesso (evita duplicação)
@@ -27,6 +26,12 @@ export function useAutoPrintRealtime(): void {
   const processingOrdersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    // Validação: se a variável de ambiente não estiver definida, desativar impressão automática
+    if (!PRINT_SERVER_URL) {
+      console.error("[AutoPrint] VITE_PRINT_SERVER_URL não definida. Impressão automática desativada.");
+      return;
+    }
+
     console.log("[AutoPrint] Iniciando listener de impressão automática...");
     console.log("[AutoPrint] Print Server URL:", PRINT_SERVER_URL);
 
