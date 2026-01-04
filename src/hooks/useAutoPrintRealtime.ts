@@ -3,19 +3,27 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Hook para impressão automática de pedidos via Supabase Realtime.
- * 
+ *
  * - Escuta eventos INSERT na tabela "orders"
- * - Envia automaticamente para o Print Server local (localhost:5000)
+ * - Envia automaticamente para o Print Server local (IP configurável via env)
  * - Marca o pedido como impresso (printed=true, printed_at) após sucesso
  * - Usa Set em memória para evitar impressões duplicadas
  * - Não interfere nos botões manuais de impressão
  */
+
+// URL do Print Server via variável de ambiente ou fallback para IP fixo
+const PRINT_SERVER_URL =
+  import.meta.env.VITE_PRINT_SERVER_URL || "http://192.168.0.23:5000";
+
 export function useAutoPrintRealtime(): void {
-  // Set para rastrear pedidos já processados (evita duplicação)
+  // Set para rastrear pedidos já impressos com sucesso (evita duplicação)
   const processedOrdersRef = useRef<Set<string>>(new Set());
+  // Set para rastrear pedidos em processamento (evita chamadas paralelas)
+  const processingOrdersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     console.log("[AutoPrint] Iniciando listener de impressão automática...");
+    console.log("[AutoPrint] Print Server URL:", PRINT_SERVER_URL);
 
     const channel = supabase
       .channel("auto-print-orders")
@@ -31,26 +39,31 @@ export function useAutoPrintRealtime(): void {
           const orderId = order.id as string;
           const printed = order.printed as boolean | undefined;
 
-          // Verificar se já foi processado
+          // Verificar se já foi impresso com sucesso anteriormente
           if (processedOrdersRef.current.has(orderId)) {
-            console.log(`[AutoPrint] Pedido ${orderId} já processado, ignorando.`);
+            console.log(`[AutoPrint] Pedido ${orderId} já foi impresso, ignorando.`);
             return;
           }
 
-          // Verificar se já está impresso
+          // Verificar se está em processamento (evita chamadas paralelas)
+          if (processingOrdersRef.current.has(orderId)) {
+            console.log(`[AutoPrint] Pedido ${orderId} já está em processamento, ignorando.`);
+            return;
+          }
+
+          // Verificar se já está marcado como impresso no banco
           if (printed === true) {
-            console.log(`[AutoPrint] Pedido ${orderId} já está impresso, ignorando.`);
+            console.log(`[AutoPrint] Pedido ${orderId} já está impresso no banco, ignorando.`);
             processedOrdersRef.current.add(orderId);
             return;
           }
 
-          // Marcar como em processamento
-          processedOrdersRef.current.add(orderId);
+          // Marcar como em processamento (temporário)
+          processingOrdersRef.current.add(orderId);
           console.log(`[AutoPrint] Novo pedido detectado: ${orderId}`);
 
           try {
             // Buscar dados completos do pedido (incluindo order_items)
-            // Nota: Alguns campos podem não estar no types.ts mas existem no banco
             const { data, error: fetchError } = await supabase
               .from("orders")
               .select(`
@@ -58,9 +71,7 @@ export function useAutoPrintRealtime(): void {
                 order_items (
                   id,
                   quantity,
-                  price,
-                  extras,
-                  tapioca_molhada,
+                  notes,
                   item:items (
                     id,
                     name
@@ -72,51 +83,39 @@ export function useAutoPrintRealtime(): void {
 
             if (fetchError || !data) {
               console.error(`[AutoPrint] Erro ao buscar pedido ${orderId}:`, fetchError);
+              processingOrdersRef.current.delete(orderId);
               return;
             }
 
-            // Cast para any para acessar campos não tipados
             const fullOrder = data as Record<string, unknown>;
 
             // Verificar novamente se já foi impresso (pode ter mudado)
             if (fullOrder.printed === true) {
               console.log(`[AutoPrint] Pedido ${orderId} já impresso (verificação dupla).`);
+              processedOrdersRef.current.add(orderId);
+              processingOrdersRef.current.delete(orderId);
               return;
             }
 
-            // Preparar dados para o Print Server
+            // Preparar dados no formato esperado pelo Print Server
             const orderItems = fullOrder.order_items as Array<Record<string, unknown>> | undefined;
             const printPayload = {
               order_id: fullOrder.id,
-              table: fullOrder.table_number,
-              customer_name: fullOrder.customer_name,
-              customer_phone: fullOrder.customer_phone,
-              order_type: fullOrder.order_type,
-              address: fullOrder.address,
-              bairro: fullOrder.bairro,
-              cep: fullOrder.cep,
-              reference: fullOrder.reference,
-              subtotal: fullOrder.subtotal,
-              delivery_tax: fullOrder.delivery_tax,
-              extras_fee: fullOrder.extras_fee,
-              total: fullOrder.total,
-              created_at: fullOrder.created_at,
-              payment_method: fullOrder.payment_method,
-              troco: fullOrder.troco,
-              observations: fullOrder.observations,
+              table: fullOrder.table_number ?? fullOrder.mesa ?? "",
               items: orderItems?.map((oi) => ({
-                quantity: oi.quantity,
-                price: oi.price,
-                extras: oi.extras,
-                tapioca_molhada: oi.tapioca_molhada,
-                item: oi.item,
+                quantity: oi.quantity as number,
+                name: (oi.item as Record<string, unknown>)?.name ?? "Item",
+                notes: (oi.notes as string) ?? "",
               })),
+              notes: (fullOrder.notes as string) ?? (fullOrder.observations as string) ?? "",
+              created_at: fullOrder.created_at,
             };
 
-            console.log(`[AutoPrint] Enviando pedido ${orderId} para impressão...`);
+            console.log(`[AutoPrint] Payload enviado:`, printPayload);
+            console.log(`[AutoPrint] Enviando pedido ${orderId} para impressão em ${PRINT_SERVER_URL}/print...`);
 
             // Enviar para o Print Server local
-            const printResponse = await fetch("http://localhost:5000/print", {
+            const printResponse = await fetch(`${PRINT_SERVER_URL}/print`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(printPayload),
@@ -125,13 +124,15 @@ export function useAutoPrintRealtime(): void {
             if (!printResponse.ok) {
               const errorText = await printResponse.text();
               console.error(`[AutoPrint] Print Server retornou erro para ${orderId}:`, errorText);
-              // Não remove do Set - permite retry manual
+              // Remove do processamento para permitir retry manual
+              processingOrdersRef.current.delete(orderId);
+              // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
               return;
             }
 
-            console.log(`[AutoPrint] Impressão enviada com sucesso para ${orderId}`);
+            console.log(`[AutoPrint] Pedido impresso com sucesso: ${orderId}`);
 
-            // Marcar como impresso no banco (usando RPC ou update com any)
+            // ✅ SOMENTE após sucesso: marcar como impresso no banco
             const { error: updateError } = await supabase
               .from("orders")
               .update({
@@ -143,13 +144,18 @@ export function useAutoPrintRealtime(): void {
             if (updateError) {
               console.error(`[AutoPrint] Erro ao marcar pedido ${orderId} como impresso:`, updateError);
             } else {
-              console.log(`[AutoPrint] Pedido ${orderId} marcado como impresso.`);
+              console.log(`[AutoPrint] Pedido ${orderId} marcado como impresso no banco.`);
             }
+
+            // ✅ SOMENTE após sucesso: adicionar ao Set de processados
+            processedOrdersRef.current.add(orderId);
+            processingOrdersRef.current.delete(orderId);
           } catch (error) {
             // Falha na impressão - não trava o sistema
-            console.error(`[AutoPrint] Erro ao processar pedido ${orderId}:`, error);
-            // Não remove do Set para evitar retry automático infinito
-            // O usuário pode usar impressão manual se necessário
+            console.error(`[AutoPrint] Erro na impressão:`, error);
+            // Remove do processamento para permitir retry manual
+            processingOrdersRef.current.delete(orderId);
+            // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
           }
         }
       )
