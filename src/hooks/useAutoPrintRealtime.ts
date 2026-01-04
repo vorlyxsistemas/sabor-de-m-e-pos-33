@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { generateReceiptHTML } from "@/lib/printReceipt";
 
 /**
  * Hook para impressão automática de pedidos via Supabase Realtime.
@@ -9,7 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
  *         NÃO usar em App.tsx ou outros layouts.
  *
  * - Escuta eventos INSERT na tabela "orders"
- * - Envia automaticamente para o Print Server local (IP configurável via env)
+ * - Gera o HTML da comanda (mesmo da impressão manual) via generateReceiptHTML
+ * - Envia o HTML para o Print Server local via POST /print-html
  * - Marca o pedido como impresso (printed=true, printed_at) após sucesso
  * - Usa Set em memória para evitar impressões duplicadas
  * - Não interfere nos botões manuais de impressão
@@ -73,7 +75,7 @@ export function useAutoPrintRealtime(): void {
           console.log(`[AutoPrint] Novo pedido detectado: ${orderId}`);
 
           try {
-            // Buscar dados completos do pedido (incluindo order_items)
+            // Buscar dados completos do pedido (incluindo order_items com extras e preços)
             const { data, error: fetchError } = await supabase
               .from("orders")
               .select(`
@@ -81,7 +83,10 @@ export function useAutoPrintRealtime(): void {
                 order_items (
                   id,
                   quantity,
+                  price,
                   notes,
+                  extras,
+                  tapioca_molhada,
                   item:items (
                     id,
                     name
@@ -97,7 +102,8 @@ export function useAutoPrintRealtime(): void {
               return;
             }
 
-            const fullOrder = data as Record<string, unknown>;
+            // Cast para any para acessar campos dinamicamente
+            const fullOrder = data as any;
 
             // Verificar novamente se já foi impresso (pode ter mudado)
             if (fullOrder.printed === true) {
@@ -107,33 +113,51 @@ export function useAutoPrintRealtime(): void {
               return;
             }
 
-            // Preparar dados no formato esperado pelo Print Server
-            const orderItems = fullOrder.order_items as Array<Record<string, unknown>> | undefined;
-            const printPayload = {
-              order_id: fullOrder.id as string,
-              table: String(fullOrder.table_number ?? fullOrder.mesa ?? ""),
-              items: (orderItems ?? []).map((oi) => ({
-                quantity: oi.quantity as number,
-                name: (oi.item as Record<string, unknown>)?.name ?? "Item",
-                notes: (oi.notes as string) ?? "",
+            // Preparar objeto do pedido no formato esperado por generateReceiptHTML
+            const orderForPrint = {
+              id: fullOrder.id,
+              customer_name: fullOrder.customer_name || "",
+              customer_phone: fullOrder.customer_phone || null,
+              status: fullOrder.status || "",
+              order_type: fullOrder.order_type || "",
+              table_number: fullOrder.table_number || null,
+              address: fullOrder.address || null,
+              bairro: fullOrder.bairro || null,
+              cep: fullOrder.cep || null,
+              reference: fullOrder.reference || null,
+              subtotal: Number(fullOrder.subtotal) || 0,
+              delivery_tax: fullOrder.delivery_tax ? Number(fullOrder.delivery_tax) : null,
+              extras_fee: fullOrder.extras_fee ? Number(fullOrder.extras_fee) : null,
+              total: Number(fullOrder.total) || 0,
+              created_at: fullOrder.created_at || new Date().toISOString(),
+              payment_method: fullOrder.payment_method || null,
+              troco: fullOrder.troco ? Number(fullOrder.troco) : null,
+              observations: fullOrder.observations || fullOrder.notes || null,
+              order_items: (fullOrder.order_items || []).map((oi: any) => ({
+                quantity: oi.quantity || 1,
+                price: oi.price || 0,
+                extras: oi.extras || null,
+                tapioca_molhada: oi.tapioca_molhada || false,
+                item: oi.item || null,
               })),
-              notes: (fullOrder.notes as string) ?? (fullOrder.observations as string) ?? "",
-              created_at: fullOrder.created_at as string,
             };
 
-            console.log(`[AutoPrint] Payload enviado:`, printPayload);
-            console.log(`[AutoPrint] Enviando pedido ${orderId} para impressão em ${PRINT_SERVER_URL}/print...`);
+            // Gerar HTML usando a mesma função da impressão manual
+            const html = generateReceiptHTML(orderForPrint);
+
+            console.log(`[AutoPrint] HTML gerado para pedido ${orderId} (${html.length} chars)`);
+            console.log(`[AutoPrint] Enviando HTML para ${PRINT_SERVER_URL}/print-html...`);
 
             // Usar AbortController com timeout de 5s para evitar travamento
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
 
             try {
-              // Enviar para o Print Server local
-              const printResponse = await fetch(`${PRINT_SERVER_URL}/print`, {
+              // Enviar HTML para o Print Server local
+              const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(printPayload),
+                body: JSON.stringify({ html }),
                 signal: controller.signal,
               });
 
