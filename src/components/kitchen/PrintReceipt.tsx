@@ -295,12 +295,12 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                    </span>
                    <span>R${lineTotal.toFixed(2)}</span>
                  </div>
-                 {/* Show unit price when quantity > 1 for clarity */}
-                 {item.quantity > 1 && (
-                   <div style={{ fontSize: '11px', fontWeight: 600, color: '#555', paddingLeft: '12px' }}>
-                     (R${unitPrice.toFixed(2)} cada)
-                   </div>
-                 )}
+                  {/* Show unit price when quantity > 1 for clarity */}
+                  {item.quantity > 1 && (
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#000', paddingLeft: '12px' }}>
+                      (R${unitPrice.toFixed(2)} cada)
+                    </div>
+                  )}
                  
                  {/* Selected Variation */}
                  {!isLunch && extras?.selected_variation && (
