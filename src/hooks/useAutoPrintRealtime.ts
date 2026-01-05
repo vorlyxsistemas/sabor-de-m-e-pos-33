@@ -40,6 +40,8 @@ interface Order {
   payment_method: string | null;
   troco: number | null;
   observations?: string | null;
+  printed?: boolean;
+  printed_at?: string | null;
   order_items: OrderItem[];
 }
 
@@ -423,7 +425,7 @@ export function useAutoPrintRealtime(): void {
               return;
             }
 
-            const fullOrder = data as Order;
+            const fullOrder = data as unknown as Order;
 
             if (fullOrder.printed === true) {
               console.log(`[AutoPrint] Pedido ${orderId} já impresso (verificação dupla).`);
