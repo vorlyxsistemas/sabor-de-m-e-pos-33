@@ -1,40 +1,21 @@
+// useAutoPrintRealtime.ts
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { generateReceiptHTML } from "@/lib/printReceipt";
 
-/**
- * Hook para impressão automática de pedidos via Supabase Realtime.
- *
- * ⚠️ USO: Este hook deve ser chamado SOMENTE no layout/admin da cozinha,
- *         no notebook conectado à impressora local.
- *         NÃO usar em App.tsx ou outros layouts.
- *
- * - Escuta eventos INSERT na tabela "orders"
- * - Gera o HTML da comanda (mesmo da impressão manual) via generateReceiptHTML
- * - Envia o HTML para o Print Server local via POST /print-html
- * - Marca o pedido como impresso (printed=true, printed_at) após sucesso
- * - Usa Set em memória para evitar impressões duplicadas
- * - Não interfere nos botões manuais de impressão
- * - Usa timeout de 5s para evitar travamento de rede
- */
-
-// URL do Print Server via variável de ambiente (sem fallback - obrigatório configurar)
+// URL do Print Server via variável de ambiente
 const PRINT_SERVER_URL = import.meta.env.VITE_PRINT_SERVER_URL;
 
 export function useAutoPrintRealtime(): void {
-  // Set para rastrear pedidos já impressos com sucesso (evita duplicação)
   const processedOrdersRef = useRef<Set<string>>(new Set());
-  // Set para rastrear pedidos em processamento (evita chamadas paralelas)
   const processingOrdersRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    // Validação: se a variável de ambiente não estiver definida, desativar impressão automática
     if (!PRINT_SERVER_URL) {
       console.error("[AutoPrint] VITE_PRINT_SERVER_URL não definida. Impressão automática desativada.");
       return;
     }
 
-    console.log("[AutoPrint] Iniciando listener de impressão automática...");
+    console.log("[AutoPrint] Listener de pedidos iniciado...");
     console.log("[AutoPrint] Print Server URL:", PRINT_SERVER_URL);
 
     const channel = supabase
@@ -47,36 +28,22 @@ export function useAutoPrintRealtime(): void {
           table: "orders",
         },
         async (payload) => {
-          const order = payload.new as Record<string, unknown>;
+          const order = payload.new as Record<string, any>;
           const orderId = order.id as string;
-          const printed = order.printed as boolean | undefined;
 
-          // Verificar se já foi impresso com sucesso anteriormente
-          if (processedOrdersRef.current.has(orderId)) {
-            console.log(`[AutoPrint] Pedido ${orderId} já foi impresso, ignorando.`);
-            return;
-          }
-
-          // Verificar se está em processamento (evita chamadas paralelas)
-          if (processingOrdersRef.current.has(orderId)) {
-            console.log(`[AutoPrint] Pedido ${orderId} já está em processamento, ignorando.`);
-            return;
-          }
-
-          // Verificar se já está marcado como impresso no banco
-          if (printed === true) {
-            console.log(`[AutoPrint] Pedido ${orderId} já está impresso no banco, ignorando.`);
+          if (processedOrdersRef.current.has(orderId)) return;
+          if (processingOrdersRef.current.has(orderId)) return;
+          if (order.printed === true) {
             processedOrdersRef.current.add(orderId);
             return;
           }
 
-          // Marcar como em processamento (temporário)
           processingOrdersRef.current.add(orderId);
           console.log(`[AutoPrint] Novo pedido detectado: ${orderId}`);
 
           try {
-            // Buscar dados completos do pedido (incluindo order_items com extras e preços)
-            const { data, error: fetchError } = await supabase
+            // Buscar dados completos do pedido
+            const { data, error } = await supabase
               .from("orders")
               .select(
                 `
@@ -88,138 +55,102 @@ export function useAutoPrintRealtime(): void {
                   notes,
                   extras,
                   tapioca_molhada,
-                  item:items (
-                    id,
-                    name
-                  )
+                  item:items (id, name)
                 )
               `,
               )
               .eq("id", orderId)
               .single();
 
-            if (fetchError || !data) {
-              console.error(`[AutoPrint] Erro ao buscar pedido ${orderId}:`, fetchError);
+            if (error || !data) {
+              console.error(`[AutoPrint] Erro ao buscar pedido ${orderId}:`, error);
               processingOrdersRef.current.delete(orderId);
               return;
             }
 
-            // Cast para any para acessar campos dinamicamente
             const fullOrder = data as any;
-
-            // Verificar novamente se já foi impresso (pode ter mudado)
             if (fullOrder.printed === true) {
-              console.log(`[AutoPrint] Pedido ${orderId} já impresso (verificação dupla).`);
               processedOrdersRef.current.add(orderId);
               processingOrdersRef.current.delete(orderId);
               return;
             }
 
-            // Preparar objeto do pedido no formato esperado por generateReceiptHTML
-            const orderForPrint = {
-              id: fullOrder.id,
-              customer_name: fullOrder.customer_name || "",
-              customer_phone: fullOrder.customer_phone || null,
-              status: fullOrder.status || "",
-              order_type: fullOrder.order_type || "",
-              table_number: fullOrder.table_number || null,
-              address: fullOrder.address || null,
-              bairro: fullOrder.bairro || null,
-              cep: fullOrder.cep || null,
-              reference: fullOrder.reference || null,
-              subtotal: Number(fullOrder.subtotal) || 0,
-              delivery_tax: fullOrder.delivery_tax ? Number(fullOrder.delivery_tax) : null,
-              extras_fee: fullOrder.extras_fee ? Number(fullOrder.extras_fee) : null,
-              total: Number(fullOrder.total) || 0,
-              created_at: fullOrder.created_at || new Date().toISOString(),
-              payment_method: fullOrder.payment_method || null,
-              troco: fullOrder.troco ? Number(fullOrder.troco) : null,
-              observations: fullOrder.observations || fullOrder.notes || null,
-              order_items: (fullOrder.order_items || []).map((oi: any) => ({
+            // Construir array de items detalhados
+            const items = (fullOrder.order_items || []).map((oi: any) => {
+              let notesArr: string[] = [];
+
+              // Adicionar extras como observação
+              if (oi.extras) notesArr.push(oi.extras);
+
+              // Marcar tapioca molhada
+              if (oi.tapioca_molhada) notesArr.push("Tapioca Molhada");
+
+              // Observações do item
+              if (oi.notes) notesArr.push(oi.notes);
+
+              return {
                 quantity: oi.quantity || 1,
+                name: oi.item?.name || "Item",
+                notes: notesArr.join(" | "), // concatena com separador
                 price: oi.price || 0,
-                extras: oi.extras || null,
-                tapioca_molhada: oi.tapioca_molhada || false,
-                item: oi.item || null,
-              })),
+              };
+            });
+
+            // Preparar objeto final para ESC/POS
+            const orderForPrint = {
+              order_id: fullOrder.id,
+              table: fullOrder.table_number || fullOrder.order_type || "N/A",
+              created_at: fullOrder.created_at || new Date().toISOString(),
+              items,
+              notes: fullOrder.observations || fullOrder.notes || "",
+              customer_name: fullOrder.customer_name || "",
+              customer_phone: fullOrder.customer_phone || "",
+              subtotal: fullOrder.subtotal || 0,
+              extras_fee: fullOrder.extras_fee || 0,
+              total: fullOrder.total || 0,
+              payment_method: fullOrder.payment_method || "",
             };
 
-            // Gerar HTML usando a mesma função da impressão manual
-            const html = generateReceiptHTML(orderForPrint);
-
-            console.log(`[AutoPrint] HTML gerado para pedido ${orderId} (${html.length} chars)`);
-            console.log(`[AutoPrint] Enviando HTML para ${PRINT_SERVER_URL}/print-html...`);
-
-            // Usar AbortController com timeout de 5s para evitar travamento
+            // Enviar para print server ESC/POS
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-            try {
-              // Enviar HTML para o Print Server local
-              const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ html: receiptHTML }),
-                signal: controller.signal,
-              });
+            const response = await fetch(`${PRINT_SERVER_URL}/print`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(orderForPrint),
+              signal: controller.signal,
+            });
 
-              clearTimeout(timeoutId);
+            clearTimeout(timeoutId);
 
-              if (!printResponse.ok) {
-                const errorText = await printResponse.text();
-                console.error(`[AutoPrint] Print Server retornou erro para ${orderId}:`, errorText);
-                // Remove do processamento para permitir retry manual
-                processingOrdersRef.current.delete(orderId);
-                // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
-                return;
-              }
-            } catch (fetchError) {
-              clearTimeout(timeoutId);
-              if ((fetchError as Error).name === "AbortError") {
-                console.error(`[AutoPrint] Timeout (5s) ao tentar imprimir pedido ${orderId}`);
-              } else {
-                console.error(`[AutoPrint] Erro de rede ao imprimir pedido ${orderId}:`, fetchError);
-              }
-              // Remove do processamento para permitir retry manual
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`[AutoPrint] Print Server retornou erro para ${orderId}:`, errorText);
               processingOrdersRef.current.delete(orderId);
-              // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
               return;
             }
 
             console.log(`[AutoPrint] Pedido impresso com sucesso: ${orderId}`);
 
-            // ✅ SOMENTE após sucesso: marcar como impresso no banco
+            // Marcar como impresso
             const { error: updateError } = await supabase
               .from("orders")
-              .update({
-                printed: true,
-                printed_at: new Date().toISOString(),
-              } as Record<string, unknown>)
+              .update({ printed: true, printed_at: new Date().toISOString() })
               .eq("id", orderId);
 
-            if (updateError) {
-              console.error(`[AutoPrint] Erro ao marcar pedido ${orderId} como impresso:`, updateError);
-            } else {
-              console.log(`[AutoPrint] Pedido ${orderId} marcado como impresso no banco.`);
-            }
+            if (updateError) console.error(`[AutoPrint] Erro ao marcar pedido ${orderId} como impresso:`, updateError);
 
-            // ✅ SOMENTE após sucesso: adicionar ao Set de processados
             processedOrdersRef.current.add(orderId);
             processingOrdersRef.current.delete(orderId);
-          } catch (error) {
-            // Falha na impressão - não trava o sistema
-            console.error(`[AutoPrint] Erro na impressão:`, error);
-            // Remove do processamento para permitir retry manual
+          } catch (err) {
+            console.error(`[AutoPrint] Erro ao imprimir pedido ${orderId}:`, err);
             processingOrdersRef.current.delete(orderId);
-            // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
           }
         },
       )
-      .subscribe((status) => {
-        console.log(`[AutoPrint] Status do canal: ${status}`);
-      });
+      .subscribe((status) => console.log(`[AutoPrint] Status do canal: ${status}`));
 
-    // Cleanup ao desmontar
     return () => {
       console.log("[AutoPrint] Removendo listener de impressão automática...");
       supabase.removeChannel(channel);
