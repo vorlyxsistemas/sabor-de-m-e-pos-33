@@ -38,6 +38,8 @@ export interface Order {
 // CONSTANTES
 // ============================================================
 
+const W = 32; // Largura padrão para impressora térmica 58mm
+
 export const orderTypeLabels: Record<string, string> = {
   local: "COMER NO LOCAL",
   retirada: "RETIRADA",
@@ -58,20 +60,111 @@ export const sideNameMap: Record<string, string> = {
 };
 
 // ============================================================
-// GERADOR ÚNICO DE COMANDA HTML
+// HELPERS
+// ============================================================
+
+function center(text: string, width = W): string {
+  const pad = Math.max(0, width - text.length);
+  const left = Math.floor(pad / 2);
+  return " ".repeat(left) + text;
+}
+
+function line(char = "-", width = W): string {
+  return char.repeat(width);
+}
+
+function leftRight(left: string, right: string, width = W): string {
+  const space = Math.max(1, width - left.length - right.length);
+  return left + " ".repeat(space) + right;
+}
+
+function wrap(text: string, width = W, indent = 0): string {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  const prefix = " ".repeat(indent);
+  const maxLen = width - indent;
+
+  for (const word of words) {
+    if (current.length + word.length + 1 <= maxLen) {
+      current = current ? current + " " + word : word;
+    } else {
+      if (current) lines.push(prefix + current);
+      current = word;
+    }
+  }
+  if (current) lines.push(prefix + current);
+  return lines.join("\n");
+}
+
+function box(text: string, width = W): string {
+  const inner = width - 4;
+  const textLen = text.length;
+  const pad = Math.max(0, inner - textLen);
+  const left = Math.floor(pad / 2);
+  const right = pad - left;
+  return `| ${" ".repeat(left)}${text}${" ".repeat(right)} |`;
+}
+
+function boxTop(width = W): string {
+  return "+" + "-".repeat(width - 2) + "+";
+}
+
+function boxBottom(width = W): string {
+  return "+" + "-".repeat(width - 2) + "+";
+}
+
+// ============================================================
+// GERADOR ÚNICO DE COMANDA HTML (TEXTO PRÉ-FORMATADO)
 // ============================================================
 
 /**
- * Gera o HTML completo da comanda para impressão.
- * Esta é a ÚNICA fonte de verdade para geração de comandas.
- * Usado tanto na impressão manual quanto na automática.
+ * Gera o HTML completo da comanda para impressão térmica.
+ * Usa <pre> com texto monospace para máxima compatibilidade.
  */
 export function buildReceiptHTML(order: Order): string {
   const orderNumber = order.id.slice(-6).toUpperCase();
   const dateTime = format(new Date(order.created_at), "dd/MM/yyyy HH:mm");
 
-  // Gera HTML dos itens
-  let itemsHTML = "";
+  const lines: string[] = [];
+
+  // Header
+  lines.push(center("SABOR DE MÃE"));
+  lines.push("");
+  lines.push(`PEDIDO: #${orderNumber}`);
+  lines.push(`DATA: ${dateTime}`);
+  
+  // Tipo de pedido em caixa
+  const orderTypeText = orderTypeLabels[order.order_type] || order.order_type;
+  const orderTypeWithTable = order.order_type === 'local' && order.table_number 
+    ? `${orderTypeText} - MESA ${order.table_number}` 
+    : orderTypeText;
+  lines.push(boxTop());
+  lines.push(box(orderTypeWithTable));
+  lines.push(boxBottom());
+  
+  lines.push(line("-"));
+  
+  // Cliente
+  lines.push(`★ CLIENTE: ${order.customer_name.toUpperCase()}`);
+  if (order.customer_phone) {
+    lines.push(`TEL: ${order.customer_phone}`);
+  }
+
+  // Entrega
+  if (order.order_type === "entrega") {
+    lines.push("");
+    lines.push(center("*** ENTREGA ***"));
+    if (order.bairro) lines.push(`BAIRRO: ${order.bairro.toUpperCase()}`);
+    if (order.address) lines.push(`ENDEREÇO: ${order.address.toUpperCase()}`);
+    if (order.reference) lines.push(`★ REF: ${order.reference.toUpperCase()}`);
+  }
+
+  lines.push(line("="));
+  lines.push(center("ITENS DO PEDIDO"));
+  lines.push(line("="));
+
+  // Itens
   order.order_items?.forEach((item) => {
     const extras = item.extras as any;
     const isLunch = extras?.type === "lunch";
@@ -102,46 +195,47 @@ export function buildReceiptHTML(order: Order): string {
     }
 
     const lineTotal = (unitBase + extrasPrice) * qty;
+    const itemNameFull = `${qty}x ${itemName.toUpperCase()}${item.tapioca_molhada ? " (MOLHADA)" : ""}`;
+    const priceStr = `R$${lineTotal.toFixed(2)}`;
 
-    itemsHTML += `
-      <div class="item">
-        <div class="item-line">
-          <span>${qty}x ${itemName.toUpperCase()}${item.tapioca_molhada ? " (MOLHADA)" : ""}</span>
-          <span>R$${lineTotal.toFixed(2)}</span>
-        </div>
-        ${qty > 1 ? `<div class="item-unit">(R$${unitBase.toFixed(2)} cada)</div>` : ""}
-    `;
+    lines.push("");
+    lines.push(leftRight(itemNameFull.substring(0, W - priceStr.length - 1), priceStr));
+    
+    if (qty > 1) {
+      lines.push(`  (R$${unitBase.toFixed(2)} cada)`);
+    }
 
     // Variação selecionada
     if (!isLunch && extras?.selected_variation) {
-      itemsHTML += `<div class="item-extras">► TIPO: ${extras.selected_variation.toUpperCase()}</div>`;
+      lines.push(`  ► TIPO: ${extras.selected_variation.toUpperCase()}`);
     }
 
     // Detalhes do almoço
     if (isLunch) {
       if (extras?.meats?.length > 0) {
-        itemsHTML += `<div class="item-extras">► CARNES INCLUÍDAS:</div>`;
+        lines.push("  ► CARNES INCLUÍDAS:");
         extras.meats.forEach((meat: string) => {
-          itemsHTML += `<div class="item-sub">• ${meat.toUpperCase()}</div>`;
+          lines.push(`    • ${meat.toUpperCase()}`);
         });
       }
       if (extras?.extraMeats?.length > 0) {
-        itemsHTML += `<div class="item-extras item-extras-border">► CARNES EXTRAS (+R$):</div>`;
+        lines.push("  ► CARNES EXTRAS (+R$):");
         extras.extraMeats.forEach((meat: string) => {
-          itemsHTML += `<div class="item-sub">• ${meat.toUpperCase()}</div>`;
+          lines.push(`    • ${meat.toUpperCase()}`);
         });
       }
       if (extras?.sides?.length > 0) {
-        itemsHTML += `<div class="item-extras item-extras-border">► ACOMPANHAMENTOS (GRÁTIS):</div>`;
+        lines.push("  ► ACOMPANHAMENTOS");
+        lines.push("    (GRÁTIS):");
         extras.sides.forEach((side: string) => {
           const sideName = sideNameMap[side] || side.toUpperCase();
-          itemsHTML += `<div class="item-sub">• ${sideName}</div>`;
+          lines.push(`    • ${sideName}`);
         });
       }
       if (extras?.paidSides?.length > 0) {
-        itemsHTML += `<div class="item-extras item-extras-border">► ACOMPANHAMENTOS (+R$):</div>`;
+        lines.push("  ► ACOMPANHAMENTOS (+R$):");
         extras.paidSides.forEach((side: any) => {
-          itemsHTML += `<div class="item-sub">• ${side.name.toUpperCase()} (+R$${Number(side.price).toFixed(2)})</div>`;
+          lines.push(`    • ${side.name.toUpperCase()}`);
         });
       }
     }
@@ -152,308 +246,68 @@ export function buildReceiptHTML(order: Order): string {
       : [];
 
     if (!isLunch && regularExtras.length > 0) {
-      itemsHTML += `<div class="item-extras">► EXTRAS: ${regularExtras.map((e: any) => e.name.toUpperCase()).join(", ")}</div>`;
+      lines.push(`  ► EXTRAS: ${regularExtras.map((e: any) => e.name.toUpperCase()).join(", ")}`);
     }
-
-    itemsHTML += `</div>`;
   });
 
-  // Seção de entrega
-  let deliverySection = "";
-  if (order.order_type === "entrega") {
-    deliverySection = `
-      <div class="section delivery">
-        <div class="delivery-header">*** ENTREGA ***</div>
-        ${order.bairro ? `<div class="delivery-bairro">BAIRRO: ${order.bairro.toUpperCase()}</div>` : ""}
-        ${order.address ? `<div>ENDEREÇO: ${order.address.toUpperCase()}</div>` : ""}
-        ${order.cep ? `<div>CEP: ${order.cep}</div>` : ""}
-        ${order.reference ? `<div class="reference">★ REF: ${order.reference.toUpperCase()}</div>` : ""}
-      </div>
-    `;
-  }
+  lines.push("");
+  lines.push(line("="));
 
-  // Seção de pagamento
+  // Totais
+  lines.push(leftRight("SUBTOTAL:", `R$ ${order.subtotal.toFixed(2)}`));
+  lines.push(leftRight("(ITENS+EXTRAS)", `${order.subtotal.toFixed(2)}`));
+  
+  if (order.delivery_tax && order.delivery_tax > 0) {
+    lines.push(leftRight("TAXA ENTREGA:", `R$ ${order.delivery_tax.toFixed(2)}`));
+  }
+  
+  lines.push("");
+  lines.push(leftRight(`★ TOTAL:`, `R$ ${order.total.toFixed(2)}`));
+
+  // Pagamento em caixa
   const paymentRaw = (order.payment_method || "").trim();
   const paymentKey = paymentRaw.toLowerCase();
   const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NÃO INFORMADO");
-  const paymentSection = `
-    <div class="section payment-box">
-      <div class="payment">★ PAGAMENTO: ${paymentLabel}</div>
-      ${paymentKey === "dinheiro" && order.troco ? `<div class="troco">TROCO PARA: R$ ${order.troco.toFixed(2)}</div>` : ""}
-    </div>
-  `;
-
-  // Seção de observações
-  let observationsSection = "";
-  if (order.observations && order.observations.trim()) {
-    observationsSection = `
-      <div class="section observations-box">
-        <div class="obs-header">★ OBSERVAÇÕES:</div>
-        <div class="obs-text">${order.observations.toUpperCase()}</div>
-      </div>
-    `;
+  
+  lines.push("");
+  lines.push(boxTop());
+  lines.push(box(`★ PAGAMENTO: ${paymentLabel}`));
+  lines.push(boxBottom());
+  
+  if (paymentKey === "dinheiro" && order.troco) {
+    lines.push(`TROCO PARA: R$ ${order.troco.toFixed(2)}`);
   }
 
-  // HTML completo
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        @page { 
-          size: 80mm auto; 
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        * {
-          color: #000 !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-          box-sizing: border-box;
-        }
-        body { 
-          font-family: 'Courier New', Courier, monospace; 
-          font-size: 12px; 
-          font-weight: 700;
-          width: 76mm; 
-          max-width: 76mm;
-          margin: 0 auto; 
-          padding: 2mm;
-          color: #000 !important;
-          background: #fff !important;
-          line-height: 1.3;
-        }
-        .header { 
-          text-align: center; 
-          margin-bottom: 12px; 
-        }
-        .title { 
-          font-weight: 900; 
-          font-size: 20px; 
-          letter-spacing: 1px;
-        }
-        .divider { 
-          font-size: 13px; 
-          font-weight: 900; 
-          letter-spacing: -1px;
-        }
-        .section { 
-          margin-bottom: 10px; 
-        }
-        .order-number {
-          font-weight: 900;
-          font-size: 16px;
-        }
-        .order-type-box {
-          font-weight: 900;
-          font-size: 16px;
-          border: 2px solid #000;
-          padding: 4px;
-          margin-top: 4px;
-          text-align: center;
-        }
-        .customer-name {
-          font-weight: 900;
-          font-size: 15px;
-        }
-        .totals { 
-          margin-top: 10px; 
-        }
-        .total-line { 
-          display: flex; 
-          justify-content: space-between; 
-          font-weight: 900; 
-          font-size: 14px;
-        }
-        .grand-total {
-          display: flex; 
-          justify-content: space-between; 
-          font-weight: 900; 
-          font-size: 18px;
-          border-top: 3px solid #000;
-          padding-top: 6px;
-          margin-top: 6px;
-        }
-        .footer { 
-          text-align: center; 
-          margin-top: 12px; 
-          font-size: 12px; 
-          font-weight: 900; 
-        }
-        .item {
-          margin-bottom: 12px;
-          border-bottom: 1px dashed #000;
-          padding-bottom: 8px;
-        }
-        .item-line {
-          display: flex;
-          justify-content: space-between;
-          font-weight: 900;
-          font-size: 14px;
-        }
-        .item-unit {
-          font-size: 11px;
-          font-weight: 600;
-          padding-left: 12px;
-        }
-        .item-extras {
-          font-size: 13px;
-          font-weight: 900;
-          padding-left: 12px;
-          margin-top: 4px;
-        }
-        .item-extras-border {
-          border-top: 1px dotted #000;
-          padding-top: 4px;
-        }
-        .item-sub {
-          font-size: 13px;
-          font-weight: 700;
-          padding-left: 20px;
-        }
-        .delivery {
-          border: 3px solid #000;
-          padding: 10px;
-          margin: 12px 0;
-          background: #fff;
-        }
-        .delivery-header {
-          text-align: center;
-          font-weight: 900;
-          font-size: 15px;
-          margin-bottom: 6px;
-          text-decoration: underline;
-        }
-        .delivery-bairro {
-          font-weight: 900;
-          font-size: 14px;
-        }
-        .reference {
-          font-weight: 900;
-          font-size: 14px;
-          margin-top: 4px;
-        }
-        .payment-box {
-          border: 3px solid #000;
-          padding: 10px;
-          margin-top: 12px;
-          background: #fff;
-        }
-        .payment {
-          font-weight: 900;
-          font-size: 15px;
-        }
-        .troco {
-          font-weight: 900;
-          font-size: 14px;
-        }
-        .observations-box {
-          border: 3px solid #000;
-          padding: 10px;
-          margin-top: 12px;
-          background: #fff;
-        }
-        .obs-header {
-          font-weight: 900;
-          font-size: 14px;
-        }
-        .obs-text {
-          font-weight: 700;
-          font-size: 13px;
-        }
-        @media print {
-          @page {
-            size: 80mm auto;
-            margin: 0 !important;
-          }
-          * {
-            color: #000 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          body {
-            background: #fff !important;
-            width: 76mm !important;
-            max-width: 76mm !important;
-            padding: 2mm !important;
-            margin: 0 !important;
-          }
-        }
-        @media print and (max-width: 62mm) {
-          @page {
-            size: 58mm auto;
-            margin: 0 !important;
-          }
-          body {
-            width: 54mm !important;
-            max-width: 54mm !important;
-            font-size: 11px !important;
-            padding: 1mm !important;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div class="title">SABOR DE MÃE</div>
-        <div class="divider">================================</div>
-      </div>
+  // Observações
+  if (order.observations && order.observations.trim()) {
+    lines.push("");
+    lines.push(boxTop());
+    lines.push(box("★ OBSERVAÇÕES"));
+    lines.push(boxBottom());
+    lines.push(wrap(order.observations.toUpperCase(), W, 0));
+  }
 
-      <div class="section">
-        <div class="order-number">PEDIDO: #${orderNumber}</div>
-        <div>DATA: ${dateTime}</div>
-        <div class="order-type-box">
-          ${orderTypeLabels[order.order_type] || order.order_type}${order.order_type === 'local' && order.table_number ? ` - MESA ${order.table_number}` : ''}
-        </div>
-      </div>
+  // Footer
+  lines.push("");
+  lines.push(line("-"));
+  lines.push(center("OBRIGADO PELA PREFERÊNCIA!"));
+  lines.push(line("-"));
 
-      <div class="divider">--------------------------------</div>
+  const contentText = lines.join("\n");
 
-      <div class="section">
-        <div class="customer-name">★ CLIENTE: ${order.customer_name.toUpperCase()}</div>
-        ${order.customer_phone ? `<div>TEL: ${order.customer_phone}</div>` : ""}
-      </div>
-
-      ${deliverySection}
-
-      <div class="section">
-        <div class="divider">======== ITENS DO PEDIDO ========</div>
-      </div>
-
-      <div class="items">
-        ${itemsHTML}
-      </div>
-
-      <div class="divider">================================</div>
-
-      <div class="totals">
-        <div class="total-line">
-          <span>SUBTOTAL (ITENS+EXTRAS):</span>
-          <span>R$ ${order.subtotal.toFixed(2)}</span>
-        </div>
-        ${order.delivery_tax && order.delivery_tax > 0 ? `
-          <div class="total-line">
-            <span>TAXA ENTREGA:</span>
-            <span>R$ ${order.delivery_tax.toFixed(2)}</span>
-          </div>
-        ` : ""}
-        <div class="grand-total">
-          <span>★ TOTAL:</span>
-          <span>R$ ${order.total.toFixed(2)}</span>
-        </div>
-      </div>
-
-      ${paymentSection}
-
-      ${observationsSection}
-
-      <div class="footer">
-        <div class="divider">================================</div>
-        <div>OBRIGADO PELA PREFERÊNCIA!</div>
-        <div class="divider">================================</div>
-      </div>
-    </body>
-    </html>
-  `;
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+@page{size:58mm auto;margin:0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.2;background:#fff;color:#000;width:58mm;max-width:58mm}
+pre{font-family:inherit;font-size:inherit;white-space:pre;margin:0;padding:2mm}
+</style>
+</head>
+<body>
+<pre>${contentText}</pre>
+</body>
+</html>`;
 }
