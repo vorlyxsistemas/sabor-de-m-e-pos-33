@@ -78,7 +78,7 @@ function leftRight(left: string, right: string, width = W): string {
   return left + " ".repeat(space) + right;
 }
 
-function wrapText(text: string, width = W, indent = 0): string[] {
+function wrap(text: string, width = W, indent = 0): string {
   const words = text.split(" ");
   const lines: string[] = [];
   let current = "";
@@ -94,7 +94,7 @@ function wrapText(text: string, width = W, indent = 0): string[] {
     }
   }
   if (current) lines.push(prefix + current);
-  return lines;
+  return lines.join("\n");
 }
 
 function box(text: string, width = W): string {
@@ -156,15 +156,12 @@ export function buildReceiptHTML(order: Order): string {
     lines.push("");
     lines.push(center("*** ENTREGA ***"));
     if (order.bairro) lines.push(`BAIRRO: ${order.bairro.toUpperCase()}`);
-    if (order.address) {
-      wrapText(`ENDEREÇO: ${order.address.toUpperCase()}`, W, 0).forEach(l => lines.push(l));
-    }
-    if (order.reference) {
-      wrapText(`★ REF: ${order.reference.toUpperCase()}`, W, 0).forEach(l => lines.push(l));
-    }
+    if (order.address) lines.push(`ENDEREÇO: ${order.address.toUpperCase()}`);
+    if (order.reference) lines.push(`★ REF: ${order.reference.toUpperCase()}`);
   }
 
-  lines.push(center("ITENS DO PEDIDO", W));
+  lines.push(line("="));
+  lines.push(center("ITENS DO PEDIDO"));
   lines.push(line("="));
 
   // Itens
@@ -202,21 +199,10 @@ export function buildReceiptHTML(order: Order): string {
     const priceStr = `R$${lineTotal.toFixed(2)}`;
 
     lines.push("");
-    
-    // Item name with price - wrap if needed
-    const maxNameLen = W - priceStr.length - 1;
-    if (itemNameFull.length <= maxNameLen) {
-      lines.push(leftRight(itemNameFull, priceStr));
-    } else {
-      // Wrap the item name, put price on first line
-      const firstPart = itemNameFull.substring(0, maxNameLen);
-      const rest = itemNameFull.substring(maxNameLen);
-      lines.push(leftRight(firstPart, priceStr));
-      wrapText(rest, W, 0).forEach(l => lines.push(l));
-    }
+    lines.push(leftRight(itemNameFull.substring(0, W - priceStr.length - 1), priceStr));
     
     if (qty > 1) {
-      lines.push(`(R$${unitBase.toFixed(2)} cada)`);
+      lines.push(`  (R$${unitBase.toFixed(2)} cada)`);
     }
 
     // Variação selecionada
@@ -224,35 +210,33 @@ export function buildReceiptHTML(order: Order): string {
       lines.push(`  ► TIPO: ${extras.selected_variation.toUpperCase()}`);
     }
 
-    // Detalhes do almoço - formato compacto com vírgulas
+    // Detalhes do almoço
     if (isLunch) {
-      // Carnes incluídas
       if (extras?.meats?.length > 0) {
-        const meatsStr = extras.meats.map((m: string) => m.toUpperCase()).join(", ");
-        wrapText(`  ► CARNES: ${meatsStr}`, W, 4).forEach(l => lines.push(l));
+        lines.push("  ► CARNES INCLUÍDAS:");
+        extras.meats.forEach((meat: string) => {
+          lines.push(`    • ${meat.toUpperCase()}`);
+        });
       }
-      
-      // Carnes extras
       if (extras?.extraMeats?.length > 0) {
-        const extraMeatsStr = extras.extraMeats.map((m: string) => m.toUpperCase()).join(", ");
-        wrapText(`  ► CARNES EXTRAS: ${extraMeatsStr}`, W, 4).forEach(l => lines.push(l));
+        lines.push("  ► CARNES EXTRAS (+R$):");
+        extras.extraMeats.forEach((meat: string) => {
+          lines.push(`    • ${meat.toUpperCase()}`);
+        });
       }
-      
-      // Acompanhamentos (grátis + pagos juntos)
-      const allSides: string[] = [];
       if (extras?.sides?.length > 0) {
+        lines.push("  ► ACOMPANHAMENTOS");
+        lines.push("    (GRÁTIS):");
         extras.sides.forEach((side: string) => {
           const sideName = sideNameMap[side] || side.toUpperCase();
-          allSides.push(sideName);
+          lines.push(`    • ${sideName}`);
         });
       }
       if (extras?.paidSides?.length > 0) {
+        lines.push("  ► ACOMPANHAMENTOS (+R$):");
         extras.paidSides.forEach((side: any) => {
-          allSides.push(side.name.toUpperCase());
+          lines.push(`    • ${side.name.toUpperCase()}`);
         });
-      }
-      if (allSides.length > 0) {
-        wrapText(`  ► ACOMP: ${allSides.join(", ")}`, W, 4).forEach(l => lines.push(l));
       }
     }
 
@@ -262,21 +246,22 @@ export function buildReceiptHTML(order: Order): string {
       : [];
 
     if (!isLunch && regularExtras.length > 0) {
-      const extrasStr = regularExtras.map((e: any) => e.name.toUpperCase()).join(", ");
-      wrapText(`  ► EXTRAS: ${extrasStr}`, W, 4).forEach(l => lines.push(l));
+      lines.push(`  ► EXTRAS: ${regularExtras.map((e: any) => e.name.toUpperCase()).join(", ")}`);
     }
   });
 
   lines.push("");
-  lines.push(line("-"));
+  lines.push(line("="));
 
   // Totais
   lines.push(leftRight("SUBTOTAL:", `R$ ${order.subtotal.toFixed(2)}`));
+  lines.push(leftRight("(ITENS+EXTRAS)", `${order.subtotal.toFixed(2)}`));
   
   if (order.delivery_tax && order.delivery_tax > 0) {
     lines.push(leftRight("TAXA ENTREGA:", `R$ ${order.delivery_tax.toFixed(2)}`));
   }
   
+  lines.push("");
   lines.push(leftRight(`★ TOTAL:`, `R$ ${order.total.toFixed(2)}`));
 
   // Pagamento em caixa
@@ -296,14 +281,17 @@ export function buildReceiptHTML(order: Order): string {
   // Observações
   if (order.observations && order.observations.trim()) {
     lines.push("");
-    lines.push("★ OBSERVAÇÕES:");
-    wrapText(order.observations.toUpperCase(), W, 0).forEach(l => lines.push(l));
+    lines.push(boxTop());
+    lines.push(box("★ OBSERVAÇÕES"));
+    lines.push(boxBottom());
+    lines.push(wrap(order.observations.toUpperCase(), W, 0));
   }
 
   // Footer
   lines.push("");
   lines.push(line("-"));
   lines.push(center("OBRIGADO PELA PREFERÊNCIA!"));
+  lines.push(line("-"));
 
   const contentText = lines.join("\n");
 
