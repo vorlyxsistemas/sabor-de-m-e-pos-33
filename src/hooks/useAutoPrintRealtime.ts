@@ -133,13 +133,8 @@ export function useAutoPrintRealtime(): void {
 
             console.log(`[AutoPrint] Pedido impresso com sucesso: ${orderId}`);
 
-            // Marcar como impresso
-            const { error: updateError } = await supabase
-              .from("orders")
-              .update({ printed: true, printed_at: new Date().toISOString() })
-              .eq("id", orderId);
-
-            if (updateError) console.error(`[AutoPrint] Erro ao marcar pedido ${orderId} como impresso:`, updateError);
+            // Log sucesso (campo printed não existe na tabela)
+            console.log(`[AutoPrint] Pedido ${orderId} processado com sucesso.`);
 
             processedOrdersRef.current.add(orderId);
             processingOrdersRef.current.delete(orderId);
