@@ -1,18 +1,59 @@
 import { useEffect, useRef } from "react";
-import { 
-  buildReceiptHTML, 
-  orderTypeLabels, 
-  paymentMethodLabels, 
-  sideNameMap,
-  type Order,
-  type OrderItem 
-} from "@/utils/receiptBuilder";
 import { format } from "date-fns";
+
+interface OrderItem {
+  quantity: number;
+  price: number;
+  extras: any;
+  tapioca_molhada: boolean;
+  item: { name: string } | null;
+}
+
+interface Order {
+  id: string;
+  customer_name: string;
+  customer_phone: string | null;
+  status: string;
+  order_type: string;
+  address: string | null;
+  bairro: string | null;
+  cep: string | null;
+  reference: string | null;
+  subtotal: number;
+  delivery_tax: number | null;
+  extras_fee: number | null;
+  total: number;
+  created_at: string;
+  payment_method: string | null;
+  troco: number | null;
+  observations?: string | null;
+  order_items: OrderItem[];
+}
 
 interface PrintReceiptProps {
   order: Order;
   onClose: () => void;
 }
+
+const orderTypeLabels: Record<string, string> = {
+  local: "COMER NO LOCAL",
+  retirada: "RETIRADA",
+  entrega: "ENTREGA",
+};
+
+const paymentMethodLabels: Record<string, string> = {
+  pix: "PIX",
+  dinheiro: "DINHEIRO",
+  cartao: "CARTÃO",
+};
+
+// Map for side names
+const sideNameMap: Record<string, string> = {
+  macarrao: "MACARRÃO",
+  farofa: "FAROFA",
+  macaxeira: "MACAXEIRA",
+  salada: "SALADA"
+};
 
 export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
   const printRef = useRef<HTMLDivElement>(null);
@@ -154,7 +195,6 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
             textAlign: 'center' 
           }}>
             {orderTypeLabels[order.order_type] || order.order_type}
-            {order.order_type === 'local' && order.table_number ? ` - MESA ${order.table_number}` : ''}
           </div>
         </div>
 
@@ -398,6 +438,3 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
     </div>
   );
 }
-
-// Re-export types for backward compatibility
-export type { Order, OrderItem };
