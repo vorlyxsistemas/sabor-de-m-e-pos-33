@@ -42,7 +42,12 @@ const paymentMethodLabels: Record<string, string> = {
   cartao: "CARTÃO",
 };
 
-export function generateReceiptHTML(order: Order): string {
+/**
+ * Função única de texto puro da comanda.
+ * Retorna APENAS texto com quebras de linha (\n).
+ * Esta é a ÚNICA fonte de verdade do layout da comanda.
+ */
+export function buildReceiptText(order: Order): string {
   const orderNumber = order.id.slice(-6).toUpperCase();
   const dateTime = format(new Date(order.created_at), "dd/MM/yyyy HH:mm");
   const LINE = "================================";
@@ -184,7 +189,17 @@ export function generateReceiptHTML(order: Order): string {
   lines.push("  OBRIGADO PELA PREFERENCIA!");
   lines.push(LINE);
 
-  const content = lines.join("\n");
+  return lines.join("\n");
+}
+
+/**
+ * Wrapper que gera HTML para impressão.
+ * Apenas envolve o texto puro de buildReceiptText em um <pre>.
+ * NÃO contém lógica de layout.
+ */
+export function generateReceiptHTML(order: Order): string {
+  const orderNumber = order.id.slice(-6).toUpperCase();
+  const content = buildReceiptText(order);
 
   return `<!DOCTYPE html>
 <html>
