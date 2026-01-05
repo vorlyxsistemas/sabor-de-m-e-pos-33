@@ -42,6 +42,13 @@ const paymentMethodLabels: Record<string, string> = {
   cartao: "CARTÃO",
 };
 
+const sideNameMap: Record<string, string> = {
+  macarrao: "MACARRÃO",
+  farofa: "FAROFA",
+  macaxeira: "MACAXEIRA",
+  salada: "SALADA",
+};
+
 export function generateReceiptHTML(order: Order): string {
   const orderNumber = order.id.slice(-6).toUpperCase();
   const dateTime = format(new Date(order.created_at), "dd/MM/yyyy HH:mm");
@@ -53,26 +60,29 @@ export function generateReceiptHTML(order: Order): string {
     const itemName = item.item?.name || (isLunch ? `ALMOÇO - ${extras?.base?.name}` : "ITEM");
 
     const qty = Number(item.quantity) || 1;
-    let unitBase = Number(item.price) || 0;
-    let extrasUnit = 0;
+    const unitBase = Number(item.price) || 0;
+    let extrasPrice = 0;
 
     if (isLunch) {
       const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
-      unitBase = Number(extras?.base?.price) || unitBase;
-      extrasUnit += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
+      extrasPrice += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
       if (Array.isArray(extras?.paidSides)) {
-        extrasUnit += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
+        extrasPrice += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
       }
       if (Array.isArray(extras?.regularExtras)) {
-        extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+        extrasPrice += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
       }
     } else if (extras && typeof extras === 'object' && !Array.isArray(extras) && Array.isArray(extras?.regularExtras)) {
-      extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+      extrasPrice += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
     } else if (Array.isArray(extras)) {
-      extrasUnit += extras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
+      extrasPrice += extras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
     }
 
-    const lineTotal = (unitBase + extrasUnit) * qty;
+    if (item.tapioca_molhada) {
+      extrasPrice += 1;
+    }
+
+    const lineTotal = (unitBase + extrasPrice) * qty;
 
     itemsHTML += `
       <div class="item">
@@ -83,34 +93,44 @@ export function generateReceiptHTML(order: Order): string {
         ${qty > 1 ? `<div class="item-unit">(R$${unitBase.toFixed(2)} cada)</div>` : ""}
     `;
 
-    // Selected Variation
     if (!isLunch && extras?.selected_variation) {
       itemsHTML += `<div class="item-extras">► TIPO: ${extras.selected_variation.toUpperCase()}</div>`;
     }
 
-    // Lunch details
     if (isLunch) {
       if (extras?.meats?.length > 0) {
-        itemsHTML += `<div class="item-extras">► CARNES: ${extras.meats.join(", ").toUpperCase()}</div>`;
+        itemsHTML += `<div class="item-extras">► CARNES INCLUÍDAS:</div>`;
+        extras.meats.forEach((meat: string) => {
+          itemsHTML += `<div class="item-sub">• ${meat.toUpperCase()}</div>`;
+        });
       }
       if (extras?.extraMeats?.length > 0) {
-        itemsHTML += `<div class="item-extras">► + EXTRAS: ${extras.extraMeats.join(", ").toUpperCase()}</div>`;
+        itemsHTML += `<div class="item-extras item-extras-border">► CARNES EXTRAS (+R$):</div>`;
+        extras.extraMeats.forEach((meat: string) => {
+          itemsHTML += `<div class="item-sub">• ${meat.toUpperCase()}</div>`;
+        });
       }
       if (extras?.sides?.length > 0) {
-        const sideMap: Record<string, string> = {
-          macarrao: "MACARRÃO",
-          farofa: "FAROFA",
-          macaxeira: "MACAXEIRA",
-          salada: "SALADA",
-        };
-        const sidesStr = extras.sides.map((s: string) => sideMap[s] || s.toUpperCase()).join(", ");
-        itemsHTML += `<div class="item-extras">► ACOMP: ${sidesStr}</div>`;
+        itemsHTML += `<div class="item-extras item-extras-border">► ACOMPANHAMENTOS (GRÁTIS):</div>`;
+        extras.sides.forEach((side: string) => {
+          const sideName = sideNameMap[side] || side.toUpperCase();
+          itemsHTML += `<div class="item-sub">• ${sideName}</div>`;
+        });
+      }
+      if (extras?.paidSides?.length > 0) {
+        itemsHTML += `<div class="item-extras item-extras-border">► ACOMPANHAMENTOS (+R$):</div>`;
+        extras.paidSides.forEach((side: any) => {
+          itemsHTML += `<div class="item-sub">• ${side.name.toUpperCase()} (+R$${Number(side.price).toFixed(2)})</div>`;
+        });
       }
     }
 
-    // Regular extras
-    if (!isLunch && extras && Array.isArray(extras) && extras.length > 0) {
-      itemsHTML += `<div class="item-extras">► EXTRAS: ${extras.map((e: any) => e.name.toUpperCase()).join(", ")}</div>`;
+    const regularExtras = !isLunch
+      ? (Array.isArray(extras) ? extras : (Array.isArray(extras?.regularExtras) ? extras.regularExtras : []))
+      : [];
+
+    if (!isLunch && regularExtras.length > 0) {
+      itemsHTML += `<div class="item-extras">► EXTRAS: ${regularExtras.map((e: any) => e.name.toUpperCase()).join(", ")}</div>`;
     }
 
     itemsHTML += `</div>`;
@@ -121,7 +141,7 @@ export function generateReceiptHTML(order: Order): string {
     deliverySection = `
       <div class="section delivery">
         <div class="delivery-header">*** ENTREGA ***</div>
-        ${order.bairro ? `<div>BAIRRO: ${order.bairro.toUpperCase()}</div>` : ""}
+        ${order.bairro ? `<div class="delivery-bairro">BAIRRO: ${order.bairro.toUpperCase()}</div>` : ""}
         ${order.address ? `<div>ENDEREÇO: ${order.address.toUpperCase()}</div>` : ""}
         ${order.cep ? `<div>CEP: ${order.cep}</div>` : ""}
         ${order.reference ? `<div class="reference">★ REF: ${order.reference.toUpperCase()}</div>` : ""}
@@ -129,22 +149,20 @@ export function generateReceiptHTML(order: Order): string {
     `;
   }
 
-  // Payment section
   const paymentRaw = (order.payment_method || "").trim();
   const paymentKey = paymentRaw.toLowerCase();
   const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NÃO INFORMADO");
-  let paymentSection = `
-    <div class="section">
+  const paymentSection = `
+    <div class="section payment-box">
       <div class="payment">★ PAGAMENTO: ${paymentLabel}</div>
-      ${paymentKey === "dinheiro" && order.troco ? `<div>TROCO PARA: R$ ${order.troco.toFixed(2)}</div>` : ""}
+      ${paymentKey === "dinheiro" && order.troco ? `<div class="troco">TROCO PARA: R$ ${order.troco.toFixed(2)}</div>` : ""}
     </div>
   `;
 
-  // Observations section - always show when present, regardless of order source
   let observationsSection = "";
   if (order.observations && order.observations.trim()) {
     observationsSection = `
-      <div class="section observations">
+      <div class="section observations-box">
         <div class="obs-header">★ OBSERVAÇÕES:</div>
         <div class="obs-text">${order.observations.toUpperCase()}</div>
       </div>
@@ -159,20 +177,23 @@ export function generateReceiptHTML(order: Order): string {
       <style>
         @page { 
           size: 80mm auto; 
-          margin: 3mm; 
+          margin: 0 !important;
+          padding: 0 !important;
         }
         * {
           color: #000 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
+          box-sizing: border-box;
         }
         body { 
           font-family: 'Courier New', Courier, monospace; 
-          font-size: 13px; 
+          font-size: 12px; 
           font-weight: 700;
-          width: 72mm; 
+          width: 76mm; 
+          max-width: 76mm;
           margin: 0 auto; 
-          padding: 4mm;
+          padding: 2mm;
           color: #000 !important;
           background: #fff !important;
           line-height: 1.3;
@@ -193,6 +214,22 @@ export function generateReceiptHTML(order: Order): string {
         }
         .section { 
           margin-bottom: 10px; 
+        }
+        .order-number {
+          font-weight: 900;
+          font-size: 16px;
+        }
+        .order-type-box {
+          font-weight: 900;
+          font-size: 16px;
+          border: 2px solid #000;
+          padding: 4px;
+          margin-top: 4px;
+          text-align: center;
+        }
+        .customer-name {
+          font-weight: 900;
+          font-size: 15px;
         }
         .totals { 
           margin-top: 10px; 
@@ -219,51 +256,91 @@ export function generateReceiptHTML(order: Order): string {
           font-weight: 900; 
         }
         .item {
-          margin-bottom: 8px;
+          margin-bottom: 12px;
+          border-bottom: 1px dashed #000;
+          padding-bottom: 8px;
         }
         .item-line {
           display: flex;
           justify-content: space-between;
           font-weight: 900;
+          font-size: 14px;
         }
         .item-unit {
           font-size: 11px;
-          margin-left: 16px;
+          font-weight: 600;
+          padding-left: 12px;
         }
         .item-extras {
-          font-size: 11px;
-          margin-left: 16px;
+          font-size: 13px;
+          font-weight: 900;
+          padding-left: 12px;
+          margin-top: 4px;
+        }
+        .item-extras-border {
+          border-top: 1px dotted #000;
+          padding-top: 4px;
+        }
+        .item-sub {
+          font-size: 13px;
+          font-weight: 700;
+          padding-left: 20px;
         }
         .delivery {
-          border: 2px solid #000;
-          padding: 8px;
-          margin: 10px 0;
+          border: 3px solid #000;
+          padding: 10px;
+          margin: 12px 0;
+          background: #fff;
         }
         .delivery-header {
           text-align: center;
           font-weight: 900;
-          font-size: 14px;
+          font-size: 15px;
           margin-bottom: 6px;
+          text-decoration: underline;
+        }
+        .delivery-bairro {
+          font-weight: 900;
+          font-size: 14px;
         }
         .reference {
           font-weight: 900;
+          font-size: 14px;
+          margin-top: 4px;
+        }
+        .payment-box {
+          border: 3px solid #000;
+          padding: 10px;
+          margin-top: 12px;
+          background: #fff;
         }
         .payment {
           font-weight: 900;
+          font-size: 15px;
+        }
+        .troco {
+          font-weight: 900;
           font-size: 14px;
         }
-        .observations {
-          border-top: 1px dashed #000;
-          padding-top: 8px;
-          margin-top: 8px;
+        .observations-box {
+          border: 3px solid #000;
+          padding: 10px;
+          margin-top: 12px;
+          background: #fff;
         }
         .obs-header {
           font-weight: 900;
+          font-size: 14px;
         }
         .obs-text {
-          margin-top: 4px;
+          font-weight: 700;
+          font-size: 13px;
         }
         @media print {
+          @page {
+            size: 80mm auto;
+            margin: 0 !important;
+          }
           * {
             color: #000 !important;
             -webkit-print-color-adjust: exact !important;
@@ -271,6 +348,22 @@ export function generateReceiptHTML(order: Order): string {
           }
           body {
             background: #fff !important;
+            width: 76mm !important;
+            max-width: 76mm !important;
+            padding: 2mm !important;
+            margin: 0 !important;
+          }
+        }
+        @media print and (max-width: 62mm) {
+          @page {
+            size: 58mm auto;
+            margin: 0 !important;
+          }
+          body {
+            width: 54mm !important;
+            max-width: 54mm !important;
+            font-size: 11px !important;
+            padding: 1mm !important;
           }
         }
       </style>
@@ -282,9 +375,9 @@ export function generateReceiptHTML(order: Order): string {
       </div>
 
       <div class="section">
-        <div>PEDIDO: #${orderNumber}</div>
+        <div class="order-number">PEDIDO: #${orderNumber}</div>
         <div>DATA: ${dateTime}</div>
-        <div class="order-type">
+        <div class="order-type-box">
           ${orderTypeLabels[order.order_type] || order.order_type}${order.order_type === 'local' && order.table_number ? ` - MESA ${order.table_number}` : ''}
         </div>
       </div>
@@ -292,7 +385,7 @@ export function generateReceiptHTML(order: Order): string {
       <div class="divider">--------------------------------</div>
 
       <div class="section">
-        <div>★ CLIENTE: ${order.customer_name.toUpperCase()}</div>
+        <div class="customer-name">★ CLIENTE: ${order.customer_name.toUpperCase()}</div>
         ${order.customer_phone ? `<div>TEL: ${order.customer_phone}</div>` : ""}
       </div>
 
@@ -310,15 +403,9 @@ export function generateReceiptHTML(order: Order): string {
 
       <div class="totals">
         <div class="total-line">
-          <span>SUBTOTAL:</span>
+          <span>SUBTOTAL (ITENS+EXTRAS):</span>
           <span>R$ ${order.subtotal.toFixed(2)}</span>
         </div>
-        ${order.extras_fee && order.extras_fee > 0 ? `
-          <div class="total-line">
-            <span>EXTRAS:</span>
-            <span>R$ ${order.extras_fee.toFixed(2)}</span>
-          </div>
-        ` : ""}
         ${order.delivery_tax && order.delivery_tax > 0 ? `
           <div class="total-line">
             <span>TAXA ENTREGA:</span>
@@ -349,7 +436,6 @@ export function printReceipt(order: Order): Promise<boolean> {
   return new Promise((resolve) => {
     const receiptHTML = generateReceiptHTML(order);
     
-    // Create hidden iframe for printing (avoids popup blockers)
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
     iframe.style.right = "0";
@@ -373,18 +459,16 @@ export function printReceipt(order: Order): Promise<boolean> {
     iframeDoc.write(receiptHTML);
     iframeDoc.close();
     
-    // Wait for content to load, then print
     iframe.onload = () => {
       setTimeout(() => {
         try {
           const iframeWindow = iframe.contentWindow;
           if (iframeWindow) {
-            console.log("Disparando impressão automática...");
+            console.log("Disparando impressão...");
             iframeWindow.focus();
             iframeWindow.print();
           }
           
-          // Clean up iframe after print dialog closes
           setTimeout(() => {
             if (document.body.contains(iframe)) {
               document.body.removeChild(iframe);
@@ -401,226 +485,10 @@ export function printReceipt(order: Order): Promise<boolean> {
       }, 300);
     };
     
-    // Fallback: trigger onload manually for some browsers
     setTimeout(() => {
       if (iframe.onload) {
         iframe.onload(new Event("load"));
       }
     }, 500);
   });
-}
-
-// ESC/POS command generator for Elgin I9 (for future WebSocket/USB integration)
-export function generateESCPOSCommands(order: Order): Uint8Array {
-  const encoder = new TextEncoder();
-  const commands: number[] = [];
-  
-  // ESC/POS Commands
-  const ESC = 0x1B;
-  const GS = 0x1D;
-  const LF = 0x0A;
-  
-  // Initialize printer
-  commands.push(ESC, 0x40); // ESC @ - Initialize
-  
-  // Set print density to maximum (darker print)
-  commands.push(GS, 0x7C, 0x08); // GS | n - Set print density (8 = max)
-  
-  // Center alignment
-  commands.push(ESC, 0x61, 0x01); // ESC a 1 - Center
-  
-  // Double height + Bold for header
-  commands.push(ESC, 0x21, 0x38); // ESC ! n - Select print mode (double height + bold)
-  
-  // Header
-  const header = "SABOR DE MAE\n";
-  commands.push(...encoder.encode(header));
-  
-  // Reset to normal + bold
-  commands.push(ESC, 0x21, 0x08); // Bold only
-  
-  commands.push(...encoder.encode("================================\n"));
-  
-  // Left alignment
-  commands.push(ESC, 0x61, 0x00);
-  
-  const orderNumber = order.id.slice(-6).toUpperCase();
-  const dateTime = format(new Date(order.created_at), "dd/MM/yyyy HH:mm");
-  
-  // Double width for order number
-  commands.push(ESC, 0x21, 0x28); // Double width + bold
-  commands.push(...encoder.encode(`PEDIDO: #${orderNumber}\n`));
-  commands.push(ESC, 0x21, 0x08); // Bold only
-  commands.push(...encoder.encode(`DATA: ${dateTime}\n`));
-  
-  // Double height + bold for order type
-  commands.push(ESC, 0x21, 0x38);
-  const orderTypeText = order.order_type === 'local' && order.table_number 
-    ? `${orderTypeLabels[order.order_type] || order.order_type} - MESA ${order.table_number}`
-    : (orderTypeLabels[order.order_type] || order.order_type);
-  commands.push(...encoder.encode(`${orderTypeText}\n`));
-  commands.push(ESC, 0x21, 0x08);
-  
-  commands.push(...encoder.encode("--------------------------------\n"));
-  
-  // Customer name - emphasized
-  commands.push(ESC, 0x21, 0x18); // Double height + bold
-  commands.push(...encoder.encode(`CLIENTE: ${order.customer_name.toUpperCase()}\n`));
-  commands.push(ESC, 0x21, 0x08);
-  
-  if (order.customer_phone) {
-    commands.push(...encoder.encode(`TEL: ${order.customer_phone}\n`));
-  }
-  
-  // Delivery section - heavily emphasized
-  if (order.order_type === "entrega") {
-    commands.push(LF);
-    commands.push(...encoder.encode("================================\n"));
-    commands.push(ESC, 0x21, 0x38); // Double height + bold
-    commands.push(...encoder.encode("*** ENTREGA ***\n"));
-    commands.push(ESC, 0x21, 0x08);
-    
-    if (order.bairro) {
-      commands.push(ESC, 0x21, 0x18); // Double height + bold
-      commands.push(...encoder.encode(`BAIRRO: ${order.bairro.toUpperCase()}\n`));
-      commands.push(ESC, 0x21, 0x08);
-    }
-    if (order.address) {
-      commands.push(...encoder.encode(`ENDERECO: ${order.address.toUpperCase()}\n`));
-    }
-    if (order.cep) {
-      commands.push(...encoder.encode(`CEP: ${order.cep}\n`));
-    }
-    if (order.reference) {
-      commands.push(ESC, 0x21, 0x18);
-      commands.push(...encoder.encode(`REF: ${order.reference.toUpperCase()}\n`));
-      commands.push(ESC, 0x21, 0x08);
-    }
-    commands.push(...encoder.encode("================================\n"));
-  }
-  
-  commands.push(LF);
-  commands.push(...encoder.encode("======== ITENS DO PEDIDO ========\n"));
-  commands.push(LF);
-  
-  // Items - all bold
-  order.order_items?.forEach((item) => {
-    const extras = item.extras as any;
-    const isLunch = extras?.type === "lunch";
-    const itemName = item.item?.name || (isLunch ? `ALMOCO - ${extras?.base?.name}` : "ITEM");
-
-    const qty = Number(item.quantity) || 1;
-    let unitBase = Number(item.price) || 0;
-    let extrasUnit = 0;
-
-    if (isLunch) {
-      const meatUnit = Number(extras?.base?.singleMeatPrice) || 6;
-      unitBase = Number(extras?.base?.price) || unitBase;
-      extrasUnit += (Array.isArray(extras?.extraMeats) ? extras.extraMeats.length : 0) * meatUnit;
-      if (Array.isArray(extras?.paidSides)) {
-        extrasUnit += extras.paidSides.reduce((sum: number, s: any) => sum + (Number(s?.price) || 0), 0);
-      }
-      if (Array.isArray(extras?.regularExtras)) {
-        extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
-      }
-    } else if (extras && typeof extras === 'object' && !Array.isArray(extras) && Array.isArray(extras?.regularExtras)) {
-      extrasUnit += extras.regularExtras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
-    } else if (Array.isArray(extras)) {
-      extrasUnit += extras.reduce((sum: number, e: any) => sum + (Number(e?.price) || 0), 0);
-    }
-
-    const lineTotal = (unitBase + extrasUnit) * qty;
-
-    commands.push(ESC, 0x21, 0x18); // Double height + bold
-    commands.push(...encoder.encode(`${qty}x ${itemName.toUpperCase()}`));
-    if (item.tapioca_molhada) commands.push(...encoder.encode(" (MOLHADA)"));
-    commands.push(...encoder.encode(` R$${lineTotal.toFixed(2)}\n`));
-    commands.push(ESC, 0x21, 0x08); // Bold only
-
-    if (qty > 1) {
-      commands.push(...encoder.encode(`  (R$${unitBase.toFixed(2)} cada)\n`));
-    }
-    
-    // Selected variation
-    if (!isLunch && extras?.selected_variation) {
-      commands.push(...encoder.encode(`  > TIPO: ${extras.selected_variation.toUpperCase()}\n`));
-    }
-    
-    if (isLunch) {
-      if (extras?.meats?.length > 0) {
-        commands.push(...encoder.encode(`  > CARNES: ${extras.meats.join(", ").toUpperCase()}\n`));
-      }
-      if (extras?.extraMeats?.length > 0) {
-        commands.push(...encoder.encode(`  > + EXTRAS: ${extras.extraMeats.join(", ").toUpperCase()}\n`));
-      }
-      if (extras?.sides?.length > 0) {
-        const sideMap: Record<string, string> = {
-          macarrao: "MACARRAO", farofa: "FAROFA",
-          macaxeira: "MACAXEIRA", salada: "SALADA"
-        };
-        const sidesStr = extras.sides.map((s: string) => sideMap[s] || s.toUpperCase()).join(", ");
-        commands.push(...encoder.encode(`  > ACOMP: ${sidesStr}\n`));
-      }
-    }
-    
-    if (!isLunch && extras && Array.isArray(extras) && extras.length > 0) {
-      commands.push(...encoder.encode(`  > EXTRAS: ${extras.map((e: any) => e.name.toUpperCase()).join(", ")}\n`));
-    }
-  });
-  
-  commands.push(LF);
-  commands.push(...encoder.encode("================================\n"));
-  
-  // Totals - all emphasized
-  commands.push(ESC, 0x21, 0x08); // Bold
-  commands.push(...encoder.encode(`SUBTOTAL: R$ ${order.subtotal.toFixed(2)}\n`));
-  if (order.extras_fee && order.extras_fee > 0) {
-    commands.push(...encoder.encode(`EXTRAS: R$ ${order.extras_fee.toFixed(2)}\n`));
-  }
-  if (order.delivery_tax && order.delivery_tax > 0) {
-    commands.push(...encoder.encode(`TAXA ENTREGA: R$ ${order.delivery_tax.toFixed(2)}\n`));
-  }
-  
-  // Grand total - maximum emphasis
-  commands.push(...encoder.encode("--------------------------------\n"));
-  commands.push(ESC, 0x21, 0x38); // Double height + bold
-  commands.push(...encoder.encode(`TOTAL: R$ ${order.total.toFixed(2)}\n`));
-  commands.push(ESC, 0x21, 0x08);
-  
-  // Payment info - emphasized
-  commands.push(LF);
-  commands.push(...encoder.encode("================================\n"));
-  const paymentRaw = (order.payment_method || "").trim();
-  const paymentKey = paymentRaw.toLowerCase();
-  const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NAO INFORMADO");
-  commands.push(ESC, 0x21, 0x18); // Double height + bold
-  commands.push(...encoder.encode(`PAGAMENTO: ${paymentLabel}\n`));
-  if (paymentKey === "dinheiro" && order.troco) {
-    commands.push(...encoder.encode(`TROCO PARA: R$ ${order.troco.toFixed(2)}\n`));
-  }
-  commands.push(ESC, 0x21, 0x08);
-  commands.push(...encoder.encode("================================\n"));
-  
-  // Observations - always show when present, regardless of order source
-  if (order.observations && order.observations.trim()) {
-    commands.push(LF);
-    commands.push(ESC, 0x21, 0x18);
-    commands.push(...encoder.encode("OBSERVACOES:\n"));
-    commands.push(ESC, 0x21, 0x08);
-    commands.push(...encoder.encode(`${order.observations.toUpperCase()}\n`));
-    commands.push(...encoder.encode("================================\n"));
-  }
-  
-  // Footer
-  commands.push(LF);
-  commands.push(ESC, 0x61, 0x01); // Center
-  commands.push(ESC, 0x21, 0x08);
-  commands.push(...encoder.encode("OBRIGADO PELA PREFERENCIA!\n"));
-  commands.push(...encoder.encode("================================\n"));
-  
-  // Cut paper
-  commands.push(LF, LF, LF);
-  commands.push(GS, 0x56, 0x00); // GS V 0 - Full cut
-  
-  return new Uint8Array(commands);
 }
