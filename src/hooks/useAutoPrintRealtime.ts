@@ -1,12 +1,10 @@
 import { useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
+import { generateReceiptHTML } from "@/lib/printReceipt";
 
 /**
  * Hook de impressão automática de comandas
- * - NÃO usa IP
- * - NÃO usa localStorage
- * - Usa fetch relativo (mesmo padrão atual)
- * - Corrige race condition
+ * - Usa o mesmo template da impressão manual (generateReceiptHTML)
  * - Garante pedido completo antes de imprimir
  */
 export function useAutoPrintRealtime(enabled: boolean = true) {
@@ -55,16 +53,13 @@ async function processAndPrintOrder(orderId: string) {
   // Aguarda pedido estar totalmente persistido
   const order = await waitForCompleteOrder(orderId);
 
-  // Envia para o print server (URL RELATIVA)
-  await sendToPrintServer(order);
+  // Gera HTML usando o mesmo template da impressão manual
+  const html = generateReceiptHTML(order as any);
 
-  // Marca como impresso
-  await supabase
-    .from("orders")
-    .update({
-      printed_at: new Date().toISOString(),
-    })
-    .eq("id", orderId);
+  // Envia para o print server
+  await sendToPrintServer(html);
+
+  console.log("[AUTO PRINT] Pedido impresso:", orderId);
 }
 
 /* ============================================================
@@ -111,18 +106,16 @@ async function waitForCompleteOrder(orderId: string, retries: number = 6, delay:
 }
 
 /* ============================================================
-   ENVIO PARA O PRINT SERVER (SEM URL FIXA)
+   ENVIO PARA O PRINT SERVER
    ============================================================ */
 
-async function sendToPrintServer(order: any) {
+async function sendToPrintServer(html: string) {
   const response = await fetch("/print-html", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      html: buildReceiptHTML(order),
-    }),
+    body: JSON.stringify({ html }),
   });
 
   const result = await response.json();
@@ -138,33 +131,4 @@ async function sendToPrintServer(order: any) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * IMPORTANTE:
- * Aqui você deve reutilizar o HTML REAL
- * do PrintReceipt.tsx (sem botões / window.print)
- */
-function buildReceiptHTML(order: any): string {
-  return `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Comanda</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: 'Courier New', monospace;
-      color: #000;
-    }
-  </style>
-</head>
-<body>
-  <strong>PEDIDO:</strong> ${order.id}<br/>
-  <strong>CLIENTE:</strong> ${order.customer_name}
-</body>
-</html>
-`;
 }
