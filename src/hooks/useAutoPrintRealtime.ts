@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { generateReceiptHTML } from "@/lib/printReceipt";
+import { buildReceiptHTML } from "@/utils/receiptBuilder";
 
 /**
  * Hook de impressão automática de comandas
- * - Usa o mesmo template da impressão manual (generateReceiptHTML)
- * - Garante pedido completo antes de imprimir
+ * - Usa o MESMO template da impressão manual (buildReceiptHTML)
+ * - Garante pedido completo antes de imprimir (anti race condition)
+ * - Envia HTML completo para o print server
  */
 export function useAutoPrintRealtime(enabled: boolean = true) {
   const printingOrdersRef = useRef<Set<string>>(new Set());
@@ -53,8 +54,8 @@ async function processAndPrintOrder(orderId: string) {
   // Aguarda pedido estar totalmente persistido
   const order = await waitForCompleteOrder(orderId);
 
-  // Gera HTML usando o mesmo template da impressão manual
-  const html = generateReceiptHTML(order as any);
+  // Gera HTML usando o MESMO template da impressão manual
+  const html = buildReceiptHTML(order as any);
 
   // Envia para o print server
   await sendToPrintServer(html);
