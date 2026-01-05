@@ -1,8 +1,7 @@
-// useAutoPrintRealtime.ts
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { generateReceiptHTML } from "@/lib/printReceipt";
 
-// URL do Print Server via variável de ambiente
 const PRINT_SERVER_URL = import.meta.env.VITE_PRINT_SERVER_URL;
 
 export function useAutoPrintRealtime(): void {
@@ -42,7 +41,6 @@ export function useAutoPrintRealtime(): void {
           console.log(`[AutoPrint] Novo pedido detectado: ${orderId}`);
 
           try {
-            // Buscar dados completos do pedido
             const { data, error } = await supabase
               .from("orders")
               .select(
@@ -75,50 +73,16 @@ export function useAutoPrintRealtime(): void {
               return;
             }
 
-            // Construir array de items detalhados
-            const items = (fullOrder.order_items || []).map((oi: any) => {
-              let notesArr: string[] = [];
+            // Gerar HTML usando a mesma função da impressão manual
+            const receiptHTML = generateReceiptHTML(fullOrder);
 
-              // Adicionar extras como observação
-              if (oi.extras) notesArr.push(oi.extras);
-
-              // Marcar tapioca molhada
-              if (oi.tapioca_molhada) notesArr.push("Tapioca Molhada");
-
-              // Observações do item
-              if (oi.notes) notesArr.push(oi.notes);
-
-              return {
-                quantity: oi.quantity || 1,
-                name: oi.item?.name || "Item",
-                notes: notesArr.join(" | "), // concatena com separador
-                price: oi.price || 0,
-              };
-            });
-
-            // Preparar objeto final para ESC/POS
-            const orderForPrint = {
-              order_id: fullOrder.id,
-              table: fullOrder.table_number || fullOrder.order_type || "N/A",
-              created_at: fullOrder.created_at || new Date().toISOString(),
-              items,
-              notes: fullOrder.observations || fullOrder.notes || "",
-              customer_name: fullOrder.customer_name || "",
-              customer_phone: fullOrder.customer_phone || "",
-              subtotal: fullOrder.subtotal || 0,
-              extras_fee: fullOrder.extras_fee || 0,
-              total: fullOrder.total || 0,
-              payment_method: fullOrder.payment_method || "",
-            };
-
-            // Enviar para print server ESC/POS
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-            const response = await fetch(`${PRINT_SERVER_URL}/print`, {
+            const response = await fetch(`${PRINT_SERVER_URL}/print-html`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(orderForPrint),
+              body: JSON.stringify({ html: receiptHTML }),
               signal: controller.signal,
             });
 
@@ -131,11 +95,7 @@ export function useAutoPrintRealtime(): void {
               return;
             }
 
-            console.log(`[AutoPrint] Pedido impresso com sucesso: ${orderId}`);
-
-            // Log sucesso (campo printed não existe na tabela)
-            console.log(`[AutoPrint] Pedido ${orderId} processado com sucesso.`);
-
+            console.log(`[AutoPrint] Pedido ${orderId} impresso com sucesso.`);
             processedOrdersRef.current.add(orderId);
             processingOrdersRef.current.delete(orderId);
           } catch (err) {
