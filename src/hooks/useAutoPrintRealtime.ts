@@ -78,7 +78,8 @@ export function useAutoPrintRealtime(): void {
             // Buscar dados completos do pedido (incluindo order_items com extras e preços)
             const { data, error: fetchError } = await supabase
               .from("orders")
-              .select(`
+              .select(
+                `
                 *,
                 order_items (
                   id,
@@ -92,7 +93,8 @@ export function useAutoPrintRealtime(): void {
                     name
                   )
                 )
-              `)
+              `,
+              )
               .eq("id", orderId)
               .single();
 
@@ -157,7 +159,7 @@ export function useAutoPrintRealtime(): void {
               const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ html }),
+                body: JSON.stringify({ html: receiptHTML }),
                 signal: controller.signal,
               });
 
@@ -211,7 +213,7 @@ export function useAutoPrintRealtime(): void {
             processingOrdersRef.current.delete(orderId);
             // NÃO adiciona ao processedOrdersRef - permite reimprimir depois
           }
-        }
+        },
       )
       .subscribe((status) => {
         console.log(`[AutoPrint] Status do canal: ${status}`);
