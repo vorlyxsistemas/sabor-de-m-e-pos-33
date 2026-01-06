@@ -466,6 +466,11 @@ const NewOrder = () => {
             created_at: new Date().toISOString(),
           };
 
+          if (!PRINT_SERVER_URL) {
+            console.warn("Print Server offline - VITE_PRINT_SERVER_URL não definida");
+            throw new Error("Print Server não configurado");
+          }
+
           const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
