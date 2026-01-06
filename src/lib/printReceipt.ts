@@ -265,12 +265,11 @@ export function generateReceiptHTML(order: Order): string {
       margin: 0 auto;
       padding: 1mm 0;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
+      font-size: 10px;
       font-weight: bold;
       color: #000;
-      line-height: 1.2;
-      white-space: pre-wrap;
-      word-break: break-word;
+      line-height: 1.15;
+      white-space: pre;
       overflow-wrap: break-word;
     }
   </style>
