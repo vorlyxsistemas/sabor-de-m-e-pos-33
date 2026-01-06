@@ -28,6 +28,8 @@ import {
   QrCode,
   ListPlus,
 } from "lucide-react";
+
+const PRINT_SERVER_URL = "http://localhost:5000";
 import { Textarea } from "@/components/ui/textarea";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
