@@ -42,7 +42,7 @@ const paymentMethodLabels: Record<string, string> = {
   cartao: "CARTAO",
 };
 
-const RECEIPT_WIDTH = 48;
+const RECEIPT_WIDTH = 32;
 
 function padRight(text: string, width: number): string {
   return text.substring(0, width).padEnd(width, " ");
@@ -114,11 +114,10 @@ export function generateReceiptText(order: Order): string {
     }
   }
 
-  // Items header - single line format
-  const itemsTitle = "ITENS DO PEDIDO";
-  const dashCount = Math.floor((W - itemsTitle.length) / 2);
-  const itemsHeader = "-".repeat(dashCount) + itemsTitle + "-".repeat(dashCount);
-  lines.push(itemsHeader.substring(0, W));
+  // Items header
+  lines.push(dividerSingle);
+  lines.push(centerText("ITENS DO PEDIDO", W));
+  lines.push(dividerSingle);
 
   // Items
   order.order_items?.forEach((item) => {
@@ -261,16 +260,18 @@ export function generateReceiptHTML(order: Order): string {
     @media print { @page { size: 58mm auto; margin: 0; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 58mm;
-      max-width: 58mm;
-      margin: 0;
-      padding: 2mm;
+      width: 48mm;
+      max-width: 48mm;
+      margin: 0 auto;
+      padding: 1mm 0;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: bold;
       color: #000;
       line-height: 1.2;
-      white-space: pre;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
     }
   </style>
 </head>
