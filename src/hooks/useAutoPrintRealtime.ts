@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-const PRINT_SERVER_URL = "http://localhost:5000";
+const PRINT_SERVER_URL = import.meta.env.VITE_PRINT_SERVER_URL;
+
+if (!PRINT_SERVER_URL) {
+  console.error("[AutoPrint] VITE_PRINT_SERVER_URL não definida");
+}
 
 /**
  * Hook para impressão automática de pedidos via Supabase Realtime.
@@ -441,10 +445,10 @@ export function useAutoPrintRealtime(): void {
             console.log(`[AutoPrint] Enviando pedido ${orderId} para /print-html...`);
 
             // ENVIAR PARA /print-html (NÃO /print!)
-            const printResponse = await fetch("http://localhost:5000/print-html", {
+            const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ html }), // Envia HTML completo
+              body: JSON.stringify({ html }),
             });
 
             if (!printResponse.ok) {

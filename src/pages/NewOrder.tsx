@@ -29,7 +29,7 @@ import {
   ListPlus,
 } from "lucide-react";
 
-const PRINT_SERVER_URL = "http://localhost:5000";
+const PRINT_SERVER_URL = import.meta.env.VITE_PRINT_SERVER_URL;
 import { Textarea } from "@/components/ui/textarea";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
