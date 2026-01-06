@@ -42,7 +42,7 @@ const paymentMethodLabels: Record<string, string> = {
   cartao: "CARTAO",
 };
 
-const RECEIPT_WIDTH = 52;
+const RECEIPT_WIDTH = 48;
 
 function padRight(text: string, width: number): string {
   return text.substring(0, width).padEnd(width, " ");
@@ -266,13 +266,11 @@ export function generateReceiptHTML(order: Order): string {
       margin: 0 auto;
       padding: 1mm 0;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 7px;
+      font-size: 9px;
       font-weight: bold;
       color: #000;
-      line-height: 1.1;
-      white-space: pre-wrap;
-      word-break: break-word;
-      overflow-wrap: break-word;
+      line-height: 1.15;
+      white-space: pre;
     }
   </style>
 </head>
