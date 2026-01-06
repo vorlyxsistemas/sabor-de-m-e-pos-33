@@ -13,7 +13,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Minus, Trash2, ShoppingCart, UtensilsCrossed, Store, MapPin, Truck, Banknote, CreditCard, QrCode, ListPlus } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  UtensilsCrossed,
+  Store,
+  MapPin,
+  Truck,
+  Banknote,
+  CreditCard,
+  QrCode,
+  ListPlus,
+} from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { LunchOrderSection } from "@/components/order/LunchOrderSection";
 import { ItemCard } from "@/components/order/ItemCard";
@@ -62,25 +76,25 @@ const NewOrder = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>("");
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<'local' | 'retirada' | 'entrega'>('local');
-  const [tableNumber, setTableNumber] = useState<string>('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [bairro, setBairro] = useState('');
-  const [reference, setReference] = useState('');
-  const [observations, setObservations] = useState('');
+  const [orderType, setOrderType] = useState<"local" | "retirada" | "entrega">("local");
+  const [tableNumber, setTableNumber] = useState<string>("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [reference, setReference] = useState("");
+  const [observations, setObservations] = useState("");
   const [deliveryTax, setDeliveryTax] = useState(0);
   const [deliveryZones, setDeliveryZones] = useState<{ id: string; bairro: string; taxa: number }[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'dinheiro' | 'cartao'>('pix');
-  const [troco, setTroco] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<"pix" | "dinheiro" | "cartao">("pix");
+  const [troco, setTroco] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   // Add to existing order state
   const [addToExisting, setAddToExisting] = useState(false);
   const [existingOrders, setExistingOrders] = useState<ExistingOrder[]>([]);
-  const [selectedExistingOrder, setSelectedExistingOrder] = useState<string>('');
+  const [selectedExistingOrder, setSelectedExistingOrder] = useState<string>("");
   const [loadingOrders, setLoadingOrders] = useState(false);
 
   useEffect(() => {
@@ -99,16 +113,13 @@ const NewOrder = () => {
   }, [addToExisting]);
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from('categories').select('*').order('name');
+    const { data } = await supabase.from("categories").select("*").order("name");
     setCategories(data || []);
     setLoading(false);
   };
 
   const fetchDeliveryZones = async () => {
-    const { data } = await supabase
-      .from('delivery_zones')
-      .select('id, bairro, taxa')
-      .order('bairro');
+    const { data } = await supabase.from("delivery_zones").select("id, bairro, taxa").order("bairro");
     setDeliveryZones(data || []);
   };
 
@@ -119,15 +130,15 @@ const NewOrder = () => {
       today.setHours(0, 0, 0, 0);
 
       const { data } = await (supabase as any)
-        .from('orders')
-        .select('id, customer_name, created_at, status, total')
-        .gte('created_at', today.toISOString())
-        .in('status', ['pending', 'preparing', 'ready'])
-        .order('created_at', { ascending: false });
+        .from("orders")
+        .select("id, customer_name, created_at, status, total")
+        .gte("created_at", today.toISOString())
+        .in("status", ["pending", "preparing", "ready"])
+        .order("created_at", { ascending: false });
 
       setExistingOrders(data || []);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error("Error fetching orders:", error);
     } finally {
       setLoadingOrders(false);
     }
@@ -135,16 +146,18 @@ const NewOrder = () => {
 
   const handleBairroChange = (selectedBairro: string) => {
     setBairro(selectedBairro);
-    const zone = deliveryZones.find(z => z.bairro === selectedBairro);
+    const zone = deliveryZones.find((z) => z.bairro === selectedBairro);
     setDeliveryTax(zone?.taxa || 0);
   };
 
   const fetchItems = async () => {
     const { data } = await supabase
-      .from('items')
-      .select('id, name, price, description, available, allow_extras, allow_tapioca_molhada, is_molhado_by_default, image_url, requires_variation, variation_options, extras(*)')
-      .eq('category_id', selectedCategory)
-      .eq('available', true);
+      .from("items")
+      .select(
+        "id, name, price, description, available, allow_extras, allow_tapioca_molhada, is_molhado_by_default, image_url, requires_variation, variation_options, extras(*)",
+      )
+      .eq("category_id", selectedCategory)
+      .eq("available", true);
     setItems(data || []);
   };
 
@@ -153,36 +166,40 @@ const NewOrder = () => {
     const tapiocaExtra = tapioca_molhada ? 1 : 0;
     const price = Number(item.price) + extrasTotal + tapiocaExtra;
 
-    const displayName = selected_variation 
-      ? `${item.name} (${selected_variation})`
-      : item.name;
+    const displayName = selected_variation ? `${item.name} (${selected_variation})` : item.name;
 
-    setCart([...cart, {
-      item_id: item.id,
-      name: displayName,
-      quantity: 1,
-      price,
-      extras,
-      tapioca_molhada,
-      selected_variation,
-    }]);
+    setCart([
+      ...cart,
+      {
+        item_id: item.id,
+        name: displayName,
+        quantity: 1,
+        price,
+        extras,
+        tapioca_molhada,
+        selected_variation,
+      },
+    ]);
   };
 
   const addLunchToCart = (lunchItem: LunchCartItem) => {
-    setCart([...cart, {
-      item_id: null,
-      name: `Almoço - ${lunchItem.base.name}`,
-      quantity: lunchItem.quantity,
-      price: lunchItem.totalPrice / lunchItem.quantity,
-      extras: lunchItem.extraMeats.map(m => ({ name: m, price: 6 })),
-      tapioca_molhada: false,
-      isLunch: true,
-      lunchBase: lunchItem.base,
-      lunchMeats: lunchItem.meats,
-      lunchExtraMeats: lunchItem.extraMeats,
-      lunchSides: lunchItem.sides,
-      lunchPaidSides: lunchItem.paidSides || [],
-    }]);
+    setCart([
+      ...cart,
+      {
+        item_id: null,
+        name: `Almoço - ${lunchItem.base.name}`,
+        quantity: lunchItem.quantity,
+        price: lunchItem.totalPrice / lunchItem.quantity,
+        extras: lunchItem.extraMeats.map((m) => ({ name: m, price: 6 })),
+        tapioca_molhada: false,
+        isLunch: true,
+        lunchBase: lunchItem.base,
+        lunchMeats: lunchItem.meats,
+        lunchExtraMeats: lunchItem.extraMeats,
+        lunchSides: lunchItem.sides,
+        lunchPaidSides: lunchItem.paidSides || [],
+      },
+    ]);
 
     toast({ title: "Almoço adicionado ao carrinho!" });
   };
@@ -192,8 +209,8 @@ const NewOrder = () => {
     setSelectedCategoryName(catName);
   };
 
-  const isLunchCategory = selectedCategoryName.toLowerCase().includes("almoço") || 
-                          selectedCategoryName.toLowerCase().includes("almoco");
+  const isLunchCategory =
+    selectedCategoryName.toLowerCase().includes("almoço") || selectedCategoryName.toLowerCase().includes("almoco");
 
   const updateQuantity = (index: number, delta: number) => {
     const newCart = [...cart];
@@ -213,17 +230,17 @@ const NewOrder = () => {
 
     for (const item of cart) {
       const quantity = item.quantity || 1;
-      
+
       // Calculate extras unit price
       let extrasUnit = 0;
-      
+
       if (item.isLunch) {
         // Lunch extras: extraMeats (R$6 each) + paidSides + regularExtras
         const extraMeatsCount = item.lunchExtraMeats?.length || 0;
         const paidSidesTotal = (item.lunchPaidSides || []).reduce((sum, s) => sum + (Number(s?.price) || 0), 0);
         const regularExtrasTotal = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
-        extrasUnit = (extraMeatsCount * 6) + paidSidesTotal + regularExtrasTotal;
-        
+        extrasUnit = extraMeatsCount * 6 + paidSidesTotal + regularExtrasTotal;
+
         // Base price for lunch
         const basePrice = Number(item.lunchBase?.price) || 0;
         const lineTotal = (basePrice + extrasUnit) * quantity;
@@ -232,11 +249,11 @@ const NewOrder = () => {
       } else {
         // Regular items: extras array
         extrasUnit = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
-        
+
         // Tapioca molhada adds R$1
         const tapiocaExtra = item.tapioca_molhada ? 1 : 0;
         extrasUnit += tapiocaExtra;
-        
+
         // Base price is item.price minus extras (since item.price in cart already includes extras)
         const basePrice = Math.max(0, Number(item.price) - extrasUnit);
         const lineTotal = (basePrice + extrasUnit) * quantity;
@@ -245,14 +262,14 @@ const NewOrder = () => {
       }
     }
 
-    return { 
+    return {
       subtotal: Math.round(itemsSubtotal * 100) / 100,
-      extrasTotal: Math.round(extrasTotal * 100) / 100
+      extrasTotal: Math.round(extrasTotal * 100) / 100,
     };
   };
 
   const { subtotal, extrasTotal } = calculateTotals();
-  const total = subtotal + (orderType === 'entrega' && !addToExisting ? deliveryTax : 0);
+  const total = subtotal + (orderType === "entrega" && !addToExisting ? deliveryTax : 0);
 
   const handleSubmit = async () => {
     if (cart.length === 0) {
@@ -277,7 +294,7 @@ const NewOrder = () => {
     try {
       if (addToExisting) {
         // Add items to existing order
-        const orderItems = cart.map(item => {
+        const orderItems = cart.map((item) => {
           let extrasData: any;
           if (item.isLunch) {
             extrasData = {
@@ -287,7 +304,7 @@ const NewOrder = () => {
               extraMeats: item.lunchExtraMeats,
               sides: item.lunchSides,
               paidSides: item.lunchPaidSides,
-              regularExtras: item.extras
+              regularExtras: item.extras,
             };
           } else {
             const parsedVariation = (() => {
@@ -300,7 +317,7 @@ const NewOrder = () => {
             if (variation) {
               extrasData = {
                 selected_variation: variation,
-                regularExtras: item.extras
+                regularExtras: item.extras,
               };
             } else {
               extrasData = item.extras;
@@ -310,7 +327,7 @@ const NewOrder = () => {
           // IMPORTANT: persist UNIT base price (extras are persisted separately)
           const extrasUnit = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
           const unitBasePrice = item.isLunch
-            ? (Number(item.lunchBase?.price) || 0)
+            ? Number(item.lunchBase?.price) || 0
             : Math.max(0, Number(item.price) - extrasUnit);
 
           return {
@@ -323,45 +340,45 @@ const NewOrder = () => {
           };
         });
 
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+        const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
         if (itemsError) throw itemsError;
 
         // Update order total
-        const existingOrder = existingOrders.find(o => o.id === selectedExistingOrder);
+        const existingOrder = existingOrders.find((o) => o.id === selectedExistingOrder);
         const newTotal = (existingOrder?.total || 0) + subtotal;
-        
+
         const { error: updateError } = await supabase
-          .from('orders')
-          .update({ 
+          .from("orders")
+          .update({
             total: newTotal,
             subtotal: newTotal - (deliveryTax || 0),
-            last_modified_at: new Date().toISOString()
+            last_modified_at: new Date().toISOString(),
           } as any)
-          .eq('id', selectedExistingOrder);
+          .eq("id", selectedExistingOrder);
 
         if (updateError) throw updateError;
 
         toast({ title: "Itens adicionados ao pedido existente!" });
-        navigate(isAdmin ? '/admin/kanban' : '/kitchen');
+        navigate(isAdmin ? "/admin/kanban" : "/kitchen");
       } else {
         // Create new order
         const { data: order, error: orderError } = await supabase
-          .from('orders')
+          .from("orders")
           .insert({
             customer_name: customerName,
             customer_phone: customerPhone || null,
             order_type: orderType,
-            table_number: orderType === 'local' && tableNumber ? parseInt(tableNumber) : null,
-            address: orderType === 'entrega' ? address : null,
-            bairro: orderType === 'entrega' ? bairro : null,
-            reference: orderType === 'entrega' ? reference : null,
-            delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+            table_number: orderType === "local" && tableNumber ? parseInt(tableNumber) : null,
+            address: orderType === "entrega" ? address : null,
+            bairro: orderType === "entrega" ? bairro : null,
+            reference: orderType === "entrega" ? reference : null,
+            delivery_tax: orderType === "entrega" ? deliveryTax : 0,
             extras_fee: extrasTotal,
             subtotal,
             total,
-            status: 'pending',
+            status: "pending",
             payment_method: paymentMethod,
-            troco: paymentMethod === 'dinheiro' && troco ? parseFloat(troco) : null,
+            troco: paymentMethod === "dinheiro" && troco ? parseFloat(troco) : null,
             observations: observations.trim() || null,
           })
           .select()
@@ -369,7 +386,7 @@ const NewOrder = () => {
 
         if (orderError) throw orderError;
 
-        const orderItems = cart.map(item => {
+        const orderItems = cart.map((item) => {
           let extrasData: any;
           if (item.isLunch) {
             extrasData = {
@@ -379,7 +396,7 @@ const NewOrder = () => {
               extraMeats: item.lunchExtraMeats,
               sides: item.lunchSides,
               paidSides: item.lunchPaidSides,
-              regularExtras: item.extras
+              regularExtras: item.extras,
             };
           } else {
             const parsedVariation = (() => {
@@ -392,7 +409,7 @@ const NewOrder = () => {
             if (variation) {
               extrasData = {
                 selected_variation: variation,
-                regularExtras: item.extras
+                regularExtras: item.extras,
               };
             } else {
               extrasData = item.extras;
@@ -402,7 +419,7 @@ const NewOrder = () => {
           // IMPORTANT: persist UNIT base price (extras are persisted separately)
           const extrasUnit = (item.extras || []).reduce((sum, e) => sum + (Number(e?.price) || 0), 0);
           const unitBasePrice = item.isLunch
-            ? (Number(item.lunchBase?.price) || 0)
+            ? Number(item.lunchBase?.price) || 0
             : Math.max(0, Number(item.price) - extrasUnit);
 
           return {
@@ -415,57 +432,64 @@ const NewOrder = () => {
           };
         });
 
-        await supabase.from('order_items').insert(orderItems);
+        await supabase.from("order_items").insert(orderItems);
 
         // Tentar impressão automática via Print Server local (não bloqueia o fluxo)
         try {
           const printData = {
             order_id: order.id,
-            table: orderType === 'local' && tableNumber ? `Mesa ${tableNumber}` : (orderType === 'entrega' ? 'Entrega' : 'Balcão'),
+            table:
+              orderType === "local" && tableNumber
+                ? `Mesa ${tableNumber}`
+                : orderType === "entrega"
+                  ? "Entrega"
+                  : "Balcão",
             customer_name: customerName,
             order_type: orderType,
-            items: cart.map(item => ({
+            items: cart.map((item) => ({
               name: item.name,
               quantity: item.quantity,
               unit_price: item.price,
               subtotal: item.price * item.quantity,
               extras: item.extras,
-              notes: item.isLunch ? `Carnes: ${item.lunchMeats?.join(', ') || ''}, Acomp: ${item.lunchSides?.join(', ') || ''}` : null
+              notes: item.isLunch
+                ? `Carnes: ${item.lunchMeats?.join(", ") || ""}, Acomp: ${item.lunchSides?.join(", ") || ""}`
+                : null,
             })),
             notes: observations.trim() || null,
             subtotal,
-            delivery_tax: orderType === 'entrega' ? deliveryTax : 0,
+            delivery_tax: orderType === "entrega" ? deliveryTax : 0,
             total,
             payment_method: paymentMethod,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
           };
 
-          const printResponse = await fetch('http://localhost:5000/print', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(printData)
+          const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(printData),
           });
 
           if (!printResponse.ok) {
-            console.warn('Print Server retornou erro:', printResponse.status);
-            toast({ 
-              title: "Pedido criado!", 
+            console.warn("Print Server retornou erro:", printResponse.status);
+            toast({
+              title: "Pedido criado!",
               description: "Impressão automática falhou - use o botão Imprimir Comanda",
-              variant: "default" 
+              variant: "default",
             });
           } else {
             toast({ title: "Pedido criado e impresso automaticamente!" });
           }
         } catch (printError) {
-          console.warn('Print Server offline ou inacessível:', printError);
-          toast({ 
-            title: "Pedido criado com sucesso!", 
+          console.warn("Print Server offline ou inacessível:", printError);
+          toast({
+            title: "Pedido criado com sucesso!",
             description: "Impressora offline - use o botão Imprimir Comanda se necessário",
-            variant: "default" 
+            variant: "default",
           });
         }
 
-        navigate(isAdmin ? '/admin/kanban' : '/kitchen');
+        navigate(isAdmin ? "/admin/kanban" : "/kitchen");
       }
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -479,13 +503,15 @@ const NewOrder = () => {
   if (loading) {
     return (
       <Layout title="Novo Pedido" subtitle="Criar pedido">
-        <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
       </Layout>
     );
   }
 
   const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(dateStr).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
   return (
@@ -495,7 +521,7 @@ const NewOrder = () => {
         <div className="lg:col-span-2 space-y-4">
           {/* Categories */}
           <div className="flex flex-wrap gap-2">
-            {categories.map(cat => (
+            {categories.map((cat) => (
               <Button
                 key={cat.id}
                 variant={selectedCategory === cat.id ? "default" : "outline"}
@@ -512,21 +538,16 @@ const NewOrder = () => {
           </div>
 
           {/* Items - Regular or Lunch */}
-          {selectedCategory && (
-            isLunchCategory ? (
+          {selectedCategory &&
+            (isLunchCategory ? (
               <LunchOrderSection onAddToCart={addLunchToCart} />
             ) : (
               <div className="grid sm:grid-cols-2 gap-3">
-                {items.map(item => (
-                  <ItemCard 
-                    key={item.id} 
-                    item={item} 
-                    onAddToCart={addToCart}
-                  />
+                {items.map((item) => (
+                  <ItemCard key={item.id} item={item} onAddToCart={addToCart} />
                 ))}
               </div>
-            )
-          )}
+            ))}
         </div>
 
         {/* Cart */}
@@ -547,46 +568,57 @@ const NewOrder = () => {
                       <div className="flex-1">
                         <p className="text-sm font-medium">{item.name}</p>
                         {item.isLunch && item.lunchMeats && (
-                          <p className="text-xs text-muted-foreground">
-                            Carnes: {item.lunchMeats.join(", ")}
-                          </p>
+                          <p className="text-xs text-muted-foreground">Carnes: {item.lunchMeats.join(", ")}</p>
                         )}
                         {item.isLunch && item.lunchExtraMeats && item.lunchExtraMeats.length > 0 && (
-                          <p className="text-xs text-orange-600">
-                            + Extras: {item.lunchExtraMeats.join(", ")}
-                          </p>
+                          <p className="text-xs text-orange-600">+ Extras: {item.lunchExtraMeats.join(", ")}</p>
                         )}
                         {item.isLunch && item.lunchSides && item.lunchSides.length > 0 && (
-                          <p className="text-xs text-green-600">
-                            Acomp: {item.lunchSides.join(", ")}
-                          </p>
+                          <p className="text-xs text-green-600">Acomp: {item.lunchSides.join(", ")}</p>
                         )}
                         {item.isLunch && item.lunchPaidSides && item.lunchPaidSides.length > 0 && (
                           <p className="text-xs text-orange-600">
-                            + Pagos: {item.lunchPaidSides.map(s => s.name).join(", ")}
+                            + Pagos: {item.lunchPaidSides.map((s) => s.name).join(", ")}
                           </p>
                         )}
                         {!item.isLunch && item.extras.length > 0 && (
                           <p className="text-xs text-muted-foreground">
-                            Extras: {item.extras.map(e => e.name).join(", ")}
+                            Extras: {item.extras.map((e) => e.name).join(", ")}
                           </p>
                         )}
                         {!item.isLunch && item.tapioca_molhada && (
-                          <Badge variant="secondary" className="text-xs mt-1">Molhada +R$1</Badge>
+                          <Badge variant="secondary" className="text-xs mt-1">
+                            Molhada +R$1
+                          </Badge>
                         )}
                         <p className="text-xs text-muted-foreground mt-1">
                           R$ {item.price.toFixed(2)} x {item.quantity}
                         </p>
                       </div>
                       <div className="flex items-center gap-1">
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQuantity(index, -1)}>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-6 w-6"
+                          onClick={() => updateQuantity(index, -1)}
+                        >
                           <Minus className="h-3 w-3" />
                         </Button>
                         <span className="text-sm w-4 text-center">{item.quantity}</span>
-                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQuantity(index, 1)}>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-6 w-6"
+                          onClick={() => updateQuantity(index, 1)}
+                        >
                           <Plus className="h-3 w-3" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeFromCart(index)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-destructive"
+                          onClick={() => removeFromCart(index)}
+                        >
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
@@ -596,9 +628,20 @@ const NewOrder = () => {
               )}
 
               <div className="pt-2 space-y-2 text-sm">
-                <div className="flex justify-between"><span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span></div>
-                {orderType === 'entrega' && !addToExisting && <div className="flex justify-between"><span>Taxa</span><span>R$ {deliveryTax.toFixed(2)}</span></div>}
-                <div className="flex justify-between font-bold"><span>Total</span><span>R$ {total.toFixed(2)}</span></div>
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>R$ {subtotal.toFixed(2)}</span>
+                </div>
+                {orderType === "entrega" && !addToExisting && (
+                  <div className="flex justify-between">
+                    <span>Taxa</span>
+                    <span>R$ {deliveryTax.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold">
+                  <span>Total</span>
+                  <span>R$ {total.toFixed(2)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -613,7 +656,7 @@ const NewOrder = () => {
                   onCheckedChange={(checked) => {
                     setAddToExisting(checked as boolean);
                     if (!checked) {
-                      setSelectedExistingOrder('');
+                      setSelectedExistingOrder("");
                     }
                   }}
                 />
@@ -656,30 +699,44 @@ const NewOrder = () => {
               <CardContent className="pt-4 space-y-3">
                 <div>
                   <Label className="text-xs">Nome do Cliente *</Label>
-                  <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Nome" />
+                  <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nome" />
                 </div>
                 <div>
                   <Label className="text-xs">Telefone</Label>
-                  <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                  <Input
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                  />
                 </div>
                 <div>
                   <Label className="text-xs font-medium">Tipo de Pedido *</Label>
-                  <RadioGroup value={orderType} onValueChange={(v: any) => setOrderType(v)} className="grid grid-cols-3 gap-2 mt-2">
-                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'local' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                  <RadioGroup
+                    value={orderType}
+                    onValueChange={(v: any) => setOrderType(v)}
+                    className="grid grid-cols-3 gap-2 mt-2"
+                  >
+                    <div
+                      className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === "local" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
+                    >
                       <RadioGroupItem value="local" id="local" className="sr-only" />
                       <Label htmlFor="local" className="cursor-pointer text-center">
                         <Store className="h-5 w-5 mx-auto mb-1" />
                         <span className="text-xs">Local</span>
                       </Label>
                     </div>
-                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'retirada' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <div
+                      className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === "retirada" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
+                    >
                       <RadioGroupItem value="retirada" id="retirada" className="sr-only" />
                       <Label htmlFor="retirada" className="cursor-pointer text-center">
                         <MapPin className="h-5 w-5 mx-auto mb-1" />
                         <span className="text-xs">Retirada</span>
                       </Label>
                     </div>
-                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === 'entrega' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <div
+                      className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${orderType === "entrega" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
+                    >
                       <RadioGroupItem value="entrega" id="entrega" className="sr-only" />
                       <Label htmlFor="entrega" className="cursor-pointer text-center">
                         <Truck className="h-5 w-5 mx-auto mb-1" />
@@ -688,7 +745,7 @@ const NewOrder = () => {
                     </div>
                   </RadioGroup>
                 </div>
-                {orderType === 'local' && (
+                {orderType === "local" && (
                   <div>
                     <Label className="text-xs">Número da Mesa</Label>
                     <Select value={tableNumber} onValueChange={setTableNumber}>
@@ -705,7 +762,7 @@ const NewOrder = () => {
                     </Select>
                   </div>
                 )}
-                {orderType === 'entrega' && (
+                {orderType === "entrega" && (
                   <>
                     <div>
                       <Label className="text-xs">Bairro *</Label>
@@ -716,7 +773,7 @@ const NewOrder = () => {
                         <SelectContent className="bg-background border shadow-lg z-50 max-h-60">
                           {deliveryZones.map((zone) => (
                             <SelectItem key={zone.id} value={zone.bairro}>
-                              {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : '(Grátis)'}
+                              {zone.bairro} {zone.taxa > 0 ? `(+R$ ${zone.taxa.toFixed(2)})` : "(Grátis)"}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -724,34 +781,48 @@ const NewOrder = () => {
                     </div>
                     <div>
                       <Label className="text-xs">Endereço *</Label>
-                      <Input value={address} onChange={e => setAddress(e.target.value)} placeholder="Rua, número" />
+                      <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Rua, número" />
                     </div>
                     <div>
                       <Label className="text-xs">Ponto de Referência</Label>
-                      <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Próximo a..." />
+                      <Input
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                        placeholder="Próximo a..."
+                      />
                     </div>
                   </>
                 )}
-                
+
                 {/* Payment Method */}
                 <div>
                   <Label className="text-xs font-medium">Forma de Pagamento *</Label>
-                  <RadioGroup value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} className="grid grid-cols-3 gap-2 mt-2">
-                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'pix' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                  <RadioGroup
+                    value={paymentMethod}
+                    onValueChange={(v: any) => setPaymentMethod(v)}
+                    className="grid grid-cols-3 gap-2 mt-2"
+                  >
+                    <div
+                      className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === "pix" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
+                    >
                       <RadioGroupItem value="pix" id="pix" className="sr-only" />
                       <Label htmlFor="pix" className="cursor-pointer text-center">
                         <QrCode className="h-5 w-5 mx-auto mb-1" />
                         <span className="text-xs">Pix</span>
                       </Label>
                     </div>
-                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'dinheiro' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <div
+                      className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === "dinheiro" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
+                    >
                       <RadioGroupItem value="dinheiro" id="dinheiro" className="sr-only" />
                       <Label htmlFor="dinheiro" className="cursor-pointer text-center">
                         <Banknote className="h-5 w-5 mx-auto mb-1" />
                         <span className="text-xs">Dinheiro</span>
                       </Label>
                     </div>
-                    <div className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === 'cartao' ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                    <div
+                      className={`flex flex-col items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${paymentMethod === "cartao" ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
+                    >
                       <RadioGroupItem value="cartao" id="cartao" className="sr-only" />
                       <Label htmlFor="cartao" className="cursor-pointer text-center">
                         <CreditCard className="h-5 w-5 mx-auto mb-1" />
@@ -760,13 +831,13 @@ const NewOrder = () => {
                     </div>
                   </RadioGroup>
                 </div>
-                {paymentMethod === 'dinheiro' && (
+                {paymentMethod === "dinheiro" && (
                   <div>
                     <Label className="text-xs">Troco para quanto?</Label>
-                    <Input 
-                      type="number" 
-                      value={troco} 
-                      onChange={e => setTroco(e.target.value)} 
+                    <Input
+                      type="number"
+                      value={troco}
+                      onChange={(e) => setTroco(e.target.value)}
                       placeholder="Ex: 50.00 (deixe vazio se não precisar)"
                     />
                   </div>
@@ -775,9 +846,9 @@ const NewOrder = () => {
                 {/* Observations */}
                 <div>
                   <Label className="text-xs">Observações</Label>
-                  <Textarea 
-                    value={observations} 
-                    onChange={e => setObservations(e.target.value)} 
+                  <Textarea
+                    value={observations}
+                    onChange={(e) => setObservations(e.target.value)}
                     placeholder="Ex: Sem cebola, ponto da carne, etc."
                     maxLength={500}
                     rows={2}
@@ -789,7 +860,7 @@ const NewOrder = () => {
 
           <Button className="w-full" onClick={handleSubmit} disabled={submitting}>
             {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            {addToExisting ? 'Adicionar ao Pedido' : 'Finalizar Pedido'}
+            {addToExisting ? "Adicionar ao Pedido" : "Finalizar Pedido"}
           </Button>
         </div>
       </div>
