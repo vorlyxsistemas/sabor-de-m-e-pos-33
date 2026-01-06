@@ -257,19 +257,19 @@ export function generateReceiptHTML(order: Order): string {
   <meta charset="UTF-8">
   <title>Comanda #${order.id.slice(-6).toUpperCase()}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; }
-    @media print { @page { size: 80mm auto; margin: 0; } }
+    @page { size: 58mm auto; margin: 0; }
+    @media print { @page { size: 58mm auto; margin: 0; } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 70mm;
-      max-width: 70mm;
-      margin: 0 auto;
-      padding: 1mm 0;
+      width: 58mm;
+      max-width: 58mm;
+      margin: 0;
+      padding: 2mm;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: bold;
       color: #000;
-      line-height: 1.15;
+      line-height: 1.2;
       white-space: pre;
     }
   </style>
