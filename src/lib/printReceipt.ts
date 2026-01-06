@@ -84,21 +84,25 @@ export function generateReceiptText(order: Order): string {
   lines.push(dividerDouble);
   lines.push(`PEDIDO: #${orderNumber}`);
   lines.push(`DATA: ${dateTime}`);
+  lines.push("");
 
   // Order type
   const orderTypeText = orderTypeLabels[order.order_type] || order.order_type.toUpperCase();
   const tableText = order.order_type === "local" && order.table_number ? ` - MESA ${order.table_number}` : "";
-  lines.push(orderTypeText + tableText);
+  lines.push(centerText(orderTypeText + tableText, W));
   lines.push(dividerSingle);
+  lines.push("");
 
   // Customer
   lines.push(`* CLIENTE: ${order.customer_name.toUpperCase()}`);
   if (order.customer_phone) {
-    lines.push(`TEL: ${order.customer_phone}`);
+    lines.push(`  TEL: ${order.customer_phone}`);
   }
+  lines.push("");
 
   // Delivery section
   if (order.order_type === "entrega") {
+    lines.push(dividerDouble);
     lines.push(centerText("*** ENTREGA ***", W));
     if (order.bairro) {
       lines.push(`BAIRRO: ${order.bairro.toUpperCase()}`);
@@ -112,12 +116,14 @@ export function generateReceiptText(order: Order): string {
     if (order.reference) {
       lines.push(`* REF: ${order.reference.toUpperCase()}`);
     }
+    lines.push(dividerDouble);
+    lines.push("");
   }
 
   // Items header
-  lines.push(dividerSingle);
   lines.push(centerText("ITENS DO PEDIDO", W));
-  lines.push(dividerSingle);
+  lines.push(dividerDouble);
+  lines.push("");
 
   // Items
   order.order_items?.forEach((item) => {
@@ -155,21 +161,21 @@ export function generateReceiptText(order: Order): string {
     lines.push(lineWithPrice(qtyLabel, priceStr, W));
 
     if (qty > 1) {
-      lines.push(` (${formatPrice(unitBase)} cada)`);
+      lines.push(`  (${formatPrice(unitBase)} cada)`);
     }
 
     // Selected variation
     if (!isLunch && extras?.selected_variation) {
-      lines.push(` > TIPO: ${extras.selected_variation.toUpperCase()}`);
+      lines.push(`  > TIPO: ${extras.selected_variation.toUpperCase()}`);
     }
 
     // Lunch details
     if (isLunch) {
       if (extras?.meats?.length > 0) {
-        lines.push(` > CARNES: ${extras.meats.join(", ").toUpperCase()}`);
+        lines.push(`  > CARNES: ${extras.meats.join(", ").toUpperCase()}`);
       }
       if (extras?.extraMeats?.length > 0) {
-        lines.push(` > + EXTRAS: ${extras.extraMeats.join(", ").toUpperCase()}`);
+        lines.push(`  > + EXTRAS: ${extras.extraMeats.join(", ").toUpperCase()}`);
       }
       if (extras?.sides?.length > 0) {
         const sideMap: Record<string, string> = {
@@ -179,18 +185,18 @@ export function generateReceiptText(order: Order): string {
           salada: "SALADA",
         };
         const sidesStr = extras.sides.map((s: string) => sideMap[s] || s.toUpperCase()).join(", ");
-        lines.push(` > ACOMP: ${sidesStr}`);
+        lines.push(`  > ACOMP: ${sidesStr}`);
       }
       if (Array.isArray(extras?.paidSides) && extras.paidSides.length > 0) {
         const paidStr = extras.paidSides.map((s: any) => s.name?.toUpperCase() || "").filter(Boolean).join(", ");
         if (paidStr) {
-          lines.push(` > ACOMP EXTRA: ${paidStr}`);
+          lines.push(`  > ACOMP EXTRA: ${paidStr}`);
         }
       }
       if (Array.isArray(extras?.regularExtras) && extras.regularExtras.length > 0) {
         const extrasStr = extras.regularExtras.map((e: any) => e.name?.toUpperCase() || "").filter(Boolean).join(", ");
         if (extrasStr) {
-          lines.push(` > EXTRAS: ${extrasStr}`);
+          lines.push(`  > EXTRAS: ${extrasStr}`);
         }
       }
     }
@@ -199,9 +205,11 @@ export function generateReceiptText(order: Order): string {
     if (!isLunch && extras && Array.isArray(extras) && extras.length > 0) {
       const extrasStr = extras.map((e: any) => e.name?.toUpperCase() || "").filter(Boolean).join(", ");
       if (extrasStr) {
-        lines.push(` > EXTRAS: ${extrasStr}`);
+        lines.push(`  > EXTRAS: ${extrasStr}`);
       }
     }
+
+    lines.push("");
   });
 
   // Totals
@@ -216,7 +224,9 @@ export function generateReceiptText(order: Order): string {
     lines.push(lineWithPrice("TAXA ENTREGA:", formatPrice(order.delivery_tax), W));
   }
 
+  lines.push(dividerSingle);
   lines.push(lineWithPrice("* TOTAL:", formatPrice(order.total), W));
+  lines.push("");
 
   // Payment
   const paymentRaw = (order.payment_method || "").trim();
@@ -238,11 +248,12 @@ export function generateReceiptText(order: Order): string {
   // Footer
   lines.push(dividerSingle);
   lines.push(centerText("OBRIGADO PELA PREFERENCIA!", W));
+  lines.push("");
 
   return lines.join("\n");
 }
 
-// HTML generation for thermal receipt printing (58mm/80mm)
+// Legacy HTML generation - kept for backward compatibility with web preview
 export function generateReceiptHTML(order: Order): string {
   const text = generateReceiptText(order);
   const escapedText = text
@@ -256,21 +267,18 @@ export function generateReceiptHTML(order: Order): string {
   <meta charset="UTF-8">
   <title>Comanda #${order.id.slice(-6).toUpperCase()}</title>
   <style>
-    @page { size: 58mm auto; margin: 0; }
-    @media print { @page { size: 58mm auto; margin: 0; } }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 48mm;
-      max-width: 48mm;
-      margin: 0 auto;
-      padding: 1mm 0;
+    @page { size: 80mm auto; margin: 3mm; }
+    * { color: #000 !important; }
+    body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 10px;
-      font-weight: bold;
-      color: #000;
-      line-height: 1.15;
-      white-space: pre;
-      overflow-wrap: break-word;
+      font-size: 14px;
+      font-weight: 700;
+      width: 72mm;
+      margin: 0 auto;
+      padding: 4mm;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      line-height: 1.4;
     }
   </style>
 </head>
