@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Hook para impressão automática de pedidos via Supabase Realtime.
- * 
+ *
  * - Escuta eventos INSERT na tabela "orders"
  * - Envia automaticamente para o Print Server local (localhost:5000)
  * - Marca o pedido como impresso (printed=true, printed_at) após sucesso
@@ -53,7 +53,8 @@ export function useAutoPrintRealtime(): void {
             // Nota: Alguns campos podem não estar no types.ts mas existem no banco
             const { data, error: fetchError } = await supabase
               .from("orders")
-              .select(`
+              .select(
+                `
                 *,
                 order_items (
                   id,
@@ -66,7 +67,8 @@ export function useAutoPrintRealtime(): void {
                     name
                   )
                 )
-              `)
+              `,
+              )
               .eq("id", orderId)
               .single();
 
@@ -116,7 +118,7 @@ export function useAutoPrintRealtime(): void {
             console.log(`[AutoPrint] Enviando pedido ${orderId} para impressão...`);
 
             // Enviar para o Print Server local
-            const printResponse = await fetch("http://localhost:5000/print", {
+            const printResponse = await fetch("http://localhost:5000/print-html", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(printPayload),
@@ -151,7 +153,7 @@ export function useAutoPrintRealtime(): void {
             // Não remove do Set para evitar retry automático infinito
             // O usuário pode usar impressão manual se necessário
           }
-        }
+        },
       )
       .subscribe((status) => {
         console.log(`[AutoPrint] Status do canal: ${status}`);
