@@ -114,10 +114,11 @@ export function generateReceiptText(order: Order): string {
     }
   }
 
-  // Items header
-  lines.push(dividerSingle);
-  lines.push(centerText("ITENS DO PEDIDO", W));
-  lines.push(dividerSingle);
+  // Items header - single line format
+  const itemsTitle = "ITENS DO PEDIDO";
+  const dashCount = Math.floor((W - itemsTitle.length) / 2);
+  const itemsHeader = "-".repeat(dashCount) + itemsTitle + "-".repeat(dashCount);
+  lines.push(itemsHeader.substring(0, W));
 
   // Items
   order.order_items?.forEach((item) => {
@@ -265,7 +266,7 @@ export function generateReceiptHTML(order: Order): string {
       margin: 0 auto;
       padding: 1mm 0;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 8px;
+      font-size: 7px;
       font-weight: bold;
       color: #000;
       line-height: 1.1;
