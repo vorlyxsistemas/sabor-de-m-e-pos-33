@@ -442,7 +442,13 @@ export function useAutoPrintRealtime(): void {
             console.log(`[AutoPrint] Gerando HTML da comanda ${orderId}...`);
             const html = gerarHTMLComanda(fullOrder);
 
-            console.log(`[AutoPrint] Enviando pedido ${orderId} para /print-html...`);
+            // Verificar se PRINT_SERVER_URL está definida
+            if (!PRINT_SERVER_URL) {
+              console.error(`[AutoPrint] VITE_PRINT_SERVER_URL não definida - impressão automática desabilitada`);
+              return;
+            }
+
+            console.log(`[AutoPrint] Enviando pedido ${orderId} para ${PRINT_SERVER_URL}/print-html...`);
 
             // ENVIAR PARA /print-html (NÃO /print!)
             const printResponse = await fetch(`${PRINT_SERVER_URL}/print-html`, {
