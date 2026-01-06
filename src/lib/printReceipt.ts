@@ -242,7 +242,7 @@ export function generateReceiptText(order: Order): string {
   return lines.join("\n");
 }
 
-// Legacy HTML generation - kept for backward compatibility with web preview
+// HTML generation for thermal receipt printing (58mm/80mm)
 export function generateReceiptHTML(order: Order): string {
   const text = generateReceiptText(order);
   const escapedText = text
@@ -256,18 +256,21 @@ export function generateReceiptHTML(order: Order): string {
   <meta charset="UTF-8">
   <title>Comanda #${order.id.slice(-6).toUpperCase()}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; padding: 0; }
-    * { margin: 0; padding: 0; color: #000 !important; }
-    body {
+    @page { size: 58mm auto; margin: 0; }
+    @media print { @page { size: 58mm auto; margin: 0; } }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 48mm;
+      max-width: 48mm;
+      margin: 0 auto;
+      padding: 1mm 0;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      font-weight: 700;
-      width: 76mm;
-      margin: 0;
-      padding: 2mm;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      line-height: 1.2;
+      font-size: 10px;
+      font-weight: bold;
+      color: #000;
+      line-height: 1.15;
+      white-space: pre;
+      overflow-wrap: break-word;
     }
   </style>
 </head>
