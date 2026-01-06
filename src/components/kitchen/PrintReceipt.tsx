@@ -299,6 +299,14 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
                      ► TIPO: {extras.selected_variation.toUpperCase()}
                    </div>
                  )}
+
+                 {!isLunch &&
+                    Array.isArray(extras?.regularExtras) &&
+                    extras.regularExtras.length > 0 && (
+                      <div style={{ paddingLeft: '12px', fontSize: '13px', fontWeight: 700 }}>
+                        ► EXTRAS: {extras.regularExtras.map((e: any) => e.name.toUpperCase()).join(", ")}
+                      </div>
+                 )}
                  
                  {/* Lunch Details */}
                  {isLunch && (
