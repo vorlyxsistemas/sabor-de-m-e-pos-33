@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+const PRINT_SERVER_URL = "http://localhost:5000";
+
 /**
  * Hook para impressão automática de pedidos via Supabase Realtime.
  *
