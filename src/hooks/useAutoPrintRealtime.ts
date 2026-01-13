@@ -118,7 +118,7 @@ export function useAutoPrintRealtime(): void {
             console.log(`[AutoPrint] Enviando pedido ${orderId} para impressão...`);
 
             // Enviar para o Print Server local
-            const printResponse = await fetch("http://localhost:5000/print-html", {
+            const printResponse = await fetch("http://localhost:5000/print-htmlv2", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(printPayload),
