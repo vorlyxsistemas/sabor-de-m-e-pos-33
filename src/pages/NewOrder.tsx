@@ -367,6 +367,42 @@ const NewOrder = () => {
             price: unitBasePrice,
           };
         });
+        try {
+          const response = await fetch("http://localhost:5000/print-htmlv2", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              type: orderType,
+              order_id: `#${order.id.slice(-6).toUpperCase()}`,
+              created_at: new Date(),
+              client: customerName,
+              phone: customerPhone,
+              bairro: bairro,
+              mesa: tableNumber,
+              endereco: address,
+              referencia: reference,
+              items: cart.map((item) => {
+                return {
+                  quantity: item.quantity,
+                  title: item.name,
+                  price: item.price,
+                  carnes: item.lunchMeats,
+                  acompanhamento:item.lunchSides,
+                  extras: item.extras,
+                  tapioca_molhada: item.tapioca_molhada
+                }
+              }),
+              delivery_fee: deliveryTax,
+              payment: paymentMethod,
+              change_for: Number(troco),
+              obs: observations,
+            }),
+          })
+        } catch (error) {
+          console.error('Erro ao imprimir comanda...')
+        }
 
         await supabase.from('order_items').insert(orderItems);
 
