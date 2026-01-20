@@ -259,7 +259,7 @@ export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetail
               )}
               {paymentKey === "pix" && (
                 <div className="space-y-2 pt-1">
-                  <p className="text-xs text-muted-foreground">Chave PIX (Telefone):</p>
+                  <p className="text-xs text-muted-foreground">Chave PIX (CNPJ):</p>
                   <div className="flex items-center gap-2">
                     <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
                     <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
