@@ -30,8 +30,8 @@ const addressSchema = z.object({
 });
 
 // PIX info
-const PIX_KEY = "88982207599";
-const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
+const PIX_KEY = "64569575000102";
+const PIX_OWNER = "JORGE LUIS DO N FRANCELINO LTDA";
 
 interface CartItem {
   item_id: string | null;

@@ -60,8 +60,8 @@ const paymentMethodLabels: Record<string, string> = {
 };
 
 // PIX info
-const PIX_KEY = "88982207599";
-const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
+const PIX_KEY = "64569575000102";
+const PIX_OWNER = "JORGE LUIS DO N FRANCELINO LTDA";
 
 export function OrderDetailsModal({ order, open, onClose, onPrint }: OrderDetailsModalProps) {
   const [copiedPix, setCopiedPix] = useState(false);
