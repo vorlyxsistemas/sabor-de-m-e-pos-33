@@ -30,8 +30,8 @@ const addressSchema = z.object({
 });
 
 // PIX info
-const PIX_KEY = "64569575000102";
-const PIX_OWNER = "JORGE LUIS DO N FRANCELINO LTDA";
+const PIX_KEY = "88982207599";
+const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
 
 interface CartItem {
   item_id: string | null;
@@ -345,6 +345,44 @@ const CustomerPedido = () => {
       if (orderError) throw orderError;
       if (data?.error) throw new Error(data.error);
 
+      const { data: printJobs, error: printJobsError } = await supabase
+        .from('print_jobs')
+        .insert({
+          order_id: data.data.id,
+          printer_name: "new order",
+          printer_type: orderType,
+          content: {
+            type: orderType,
+            order_id: `#${data.data.id.slice(-6).toUpperCase()}`,
+            created_at: new Date().toISOString(),
+            client: customerName,
+            phone: customerPhone,
+            bairro,
+            mesa: tableNumber,
+            endereco: address,
+            referencia: reference,
+            items: cart.map(item => ({
+              quantity: item.quantity,
+              title: item.name,
+              price: item.price,
+              carnes: item.lunchMeats,
+              acompanhamento: item.lunchSides,
+              extras: item.extras,
+              tapioca_molhada: item.tapioca_molhada
+            })),
+            delivery_fee: deliveryTax,
+            payment: paymentMethod,
+            change_for: Number(troco),
+            obs: observations
+          },
+          attempts: 0,
+          error_message: ''
+        })
+        .select()
+        .single();
+      
+      if(printJobsError) console.error('Errro ao gerar JOB:', printJobsError);
+
       toast({ title: "Pedido realizado com sucesso!" });
       setCart([]);
       navigate('/cliente');
@@ -625,7 +663,7 @@ const CustomerPedido = () => {
 
               {paymentMethod === 'pix' && (
                 <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                  <p className="text-xs font-medium">Chave PIX (CNPJ):</p>
+                  <p className="text-xs font-medium">Chave PIX (Telefone):</p>
                   <div className="flex items-center gap-2">
                     <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
                     <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
