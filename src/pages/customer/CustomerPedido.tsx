@@ -30,8 +30,8 @@ const addressSchema = z.object({
 });
 
 // PIX info
-const PIX_KEY = "88982207599";
-const PIX_OWNER = "Jorge Luis do Nascimento Francelino";
+const PIX_KEY = "64569575000102";
+const PIX_OWNER = "JORGE LUIS DO N FRANCELINO LTDA";
 
 interface CartItem {
   item_id: string | null;
@@ -663,7 +663,7 @@ const CustomerPedido = () => {
 
               {paymentMethod === 'pix' && (
                 <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                  <p className="text-xs font-medium">Chave PIX (Telefone):</p>
+                  <p className="text-xs font-medium">Chave PIX (CNPJ):</p>
                   <div className="flex items-center gap-2">
                     <code className="text-sm bg-background px-2 py-1 rounded flex-1">{PIX_KEY}</code>
                     <Button size="sm" variant="outline" onClick={handleCopyPix} className="gap-1">
