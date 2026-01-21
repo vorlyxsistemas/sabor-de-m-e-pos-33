@@ -418,6 +418,13 @@ export function PrintReceipt({ order, onClose }: PrintReceiptProps) {
           {paymentKey === "dinheiro" && order.troco && (
             <div style={{ fontWeight: 900, fontSize: '14px' }}>TROCO PARA: R$ {order.troco.toFixed(2)}</div>
           )}
+          
+          {paymentKey === "pix" && (
+          <div style={{ marginTop: '6px', fontWeight: 700, fontSize: '13px' }}>
+            <div>CNPJ: 64569575000102</div>
+            <div>JORGE LUIS DO N FRANCELINO LTDA</div>
+          </div>
+          )}
         </div>
 
         {/* Observations - always show when present, regardless of order source */}
