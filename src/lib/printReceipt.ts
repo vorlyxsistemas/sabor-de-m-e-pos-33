@@ -134,10 +134,24 @@ export function generateReceiptHTML(order: Order): string {
   const paymentKey = paymentRaw.toLowerCase();
   const paymentLabel = paymentMethodLabels[paymentKey] || (paymentRaw ? paymentRaw.toUpperCase() : "NÃO INFORMADO");
   let paymentSection = `
-    <div style="margin-top: 12px; border: 3px solid #000; padding: 10px; background: #fff;">
-      <div style="font-weight: 900; font-size: 15px;">★ PAGAMENTO: ${paymentLabel}</div>
-      ${paymentKey === "dinheiro" && order.troco ? `<div style="font-weight: 900; font-size: 14px;">TROCO PARA: R$ ${order.troco.toFixed(2)}</div>` : ""}
-    </div>
+  <div style="margin-top: 12px; border: 3px solid #000; padding: 10px; background: #fff;">
+    <div style="font-weight: 900; font-size: 15px;">★ PAGAMENTO: ${paymentLabel}</div>
+
+    ${paymentKey === "dinheiro" && order.troco
+      ? `<div style="font-weight: 900; font-size: 14px;">TROCO PARA: R$ ${order.troco.toFixed(2)}</div>`
+      : ""
+    }
+
+    ${paymentKey === "pix"
+      ? `
+        <div style="margin-top: 6px; font-weight: 700; font-size: 13px;">
+          <div>CNPJ: 64569575000102</div>
+          <div>JORGE LUIS DO N FRANCELINO LTDA</div>
+        </div>
+      `
+      : ""
+    }
+  </div>
   `;
 
   // Observations section - always show when present, regardless of order source
